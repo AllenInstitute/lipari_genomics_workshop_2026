@@ -88,12 +88,13 @@ md("""Look at the cell metadata (`obs`). Key columns:
 
 We rename the carried atlas clustering to `atlas_leiden` (we will compute our own
 `leiden` later), rename the all-nuclei propagated class to `class_coarse` (used for
-QC only), and keep an `atlas_qc` copy of the ground-truth decision.""")
+QC only), and set aside an `atlas_qc` copy of the ground-truth decision **for later**
+- we will not peek at it until after you have chosen your own thresholds.""")
 code("""adata.obs = adata.obs.rename(columns={'leiden': 'atlas_leiden',
                                       'Class_propagated': 'class_coarse'})
+# Ground-truth keep/drop decision, kept aside. No peeking until section 3!
 adata.obs['atlas_qc'] = adata.obs['qc_status']
-print(adata.obs['qc_status'].value_counts())
-print()
+print(f'{adata.n_obs:,} nuclei x {adata.n_vars:,} genes')
 print(adata.obs['species'].value_counts())
 adata.obs.head()""")
 
@@ -203,38 +204,33 @@ therefore set **class-specific** gene-count bounds.""")
 code("""sc.pl.violin(adata, 'log.gene.counts.0', groupby='class_coarse',
              stripplot=False, rotation=30)""")
 
-md("""The doublet scores and ribosomal fraction, split by the atlas decision
-(`atlas_qc`), show where the filtered-out nuclei concentrate.""")
+md("""Now look at the distributions of the doublet scores and ribosomal fraction.
+High doublet scores and very high ribosomal fractions are classic signs of
+low-quality nuclei - keep an eye on the right-hand tails. *(We deliberately do not
+show the atlas's keep/drop answer yet - you will pick your own thresholds first.)*""")
 code("""def qc_histograms(df):
     metrics = ['doublet_score', 'solo_doublet', 'percent_ribo']
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     for ax, m in zip(axes, metrics):
-        for status, color in [('passed_qc', '#2c7fb8'), ('filtered_out', '#d95f0e')]:
-            ax.hist(df.loc[df['atlas_qc'] == status, m], bins=60, alpha=0.6,
-                    label=status, color=color)
-        ax.set_xlabel(m); ax.set_ylabel('nuclei'); ax.legend()
+        ax.hist(df[m], bins=60, color='#4c72b0')
+        ax.set_xlabel(m); ax.set_ylabel('nuclei')
     plt.tight_layout(); plt.show()
 
 qc_histograms(adata.obs)""")
 
-md("""### Where do the low-quality nuclei sit on the UMAP?
+md("""### Where might the low-quality nuclei sit on the UMAP?
 
-Before we remove anything, colour the **pre-filter UMAP** (`X_umap_prefilter`,
-computed on *all* nuclei) by the atlas QC decision, by coarse cell class
-(`class_coarse`, which - unlike `Class_V2` - is defined for the filtered cells too),
-and by the per-nucleus **doublet score**. Filtered-out nuclei (orange) tend to form
-their own low-quality territory and fringes rather than mixing evenly into the
-healthy populations, and high doublet scores often light up those same regions -
-that is exactly what QC removes. Keep this picture in mind: after you set your own
-thresholds you will be cutting these regions.""")
-code("""fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-sc.pl.embedding(adata, basis='X_umap_prefilter', color='atlas_qc', ax=axes[0],
-                show=False, title='atlas QC decision (pre-filter)', size=8)
-sc.pl.embedding(adata, basis='X_umap_prefilter', color='class_coarse',
-                ax=axes[1], show=False, title='coarse cell class', size=8)
-sc.pl.embedding(adata, basis='X_umap_prefilter', color='doublet_score', ax=axes[2],
-                show=False, title='doublet score', size=8, cmap='viridis')
-plt.tight_layout(); plt.show()""")
+Colour the **pre-filter UMAP** (`X_umap_prefilter`, computed on *all* nuclei) by
+coarse cell class (`class_coarse`, defined for every nucleus) and by the per-nucleus
+**doublet score**. Watch for small fringe islands and regions where the doublet
+score lights up - those are candidate low-quality territories. After you set your own
+thresholds you will be cutting regions like these, and *then* we reveal the atlas's
+decision.""")
+code("""with plt.rc_context({'figure.figsize': (7, 7)}):
+    sc.pl.embedding(adata, basis='X_umap_prefilter',
+                    color=['class_coarse', 'doublet_score'],
+                    title=['coarse cell class', 'doublet score'],
+                    size=8, cmap='viridis', ncols=2, wspace=0.3)""")
 
 # ---- 3. Class-specific QC with sciduck ----------------------------------------
 md("""## 3. Class-specific QC with `sciduck`
@@ -263,9 +259,9 @@ code("""# >>> EDIT THESE THRESHOLDS <<<
 # through. Narrow them until you are only keeping good-quality nuclei.
 # allowed log10(genes detected) range, per cell class
 GENE_BOUNDS = {
-    'Non-Neurons':   (0.0, 10.0),   # wide open - tighten me!
-    'neurons':       (0.0, 10.0),   # GABAergic / Glutamatergic / Cholinergic
-    'Motor Neurons': (0.0, 10.0),   # motor neurons
+    'Non-Neurons':   (0.0, 5.0),   # wide open - tighten me!
+    'neurons':       (0.0, 5.0),   # GABAergic / Glutamatergic / Cholinergic
+    'Motor Neurons': (0.0, 5.0),   # motor neurons
 }
 MAX_DOUBLET_SCORE = 1.0   # drop nuclei above this doublet score (1.0 = keep all)
 MAX_SOLO_DOUBLET  = 1.0   # drop nuclei above this SOLO doublet probability
@@ -348,13 +344,41 @@ for metric, d in adata.uns['qc_filtered'].items():
 md("""### See exactly what *you* are about to remove
 
 Plot your own decision on the pre-filter UMAP: nuclei you marked to **keep** vs
-**remove**. Compare this with the atlas-decision UMAP above - tightening or
-loosening the thresholds in the cell above moves the boundary of the orange
-region. Re-run the constraints with different numbers and watch this plot change.""")
+**remove**. Tightening or loosening the thresholds in the cell above moves the
+boundary of the orange region. Re-run the constraints with different numbers - then
+scroll down to the reveal to see how the atlas actually drew the line.""")
 code("""adata.obs['your_qc'] = np.where(adata.obs['keeper_cells'], 'keep', 'remove')
-sc.pl.embedding(adata, basis='X_umap_prefilter', color='your_qc',
-                title='your QC decision (pre-filter UMAP)',
-                palette={'keep': '#2c7fb8', 'remove': '#d95f0e'}, size=8)""")
+with plt.rc_context({'figure.figsize': (8, 8)}):
+    sc.pl.embedding(adata, basis='X_umap_prefilter', color='your_qc',
+                    title='your QC decision (pre-filter UMAP)',
+                    palette={'keep': '#2c7fb8', 'remove': '#d95f0e'}, size=8)""")
+
+md("""### The reveal: what did the atlas actually filter?
+
+Now that *you* have committed to thresholds, we can finally colour by the atlas's
+ground-truth decision (`atlas_qc`). The histograms split each QC metric into the
+nuclei the atlas **kept** (blue) vs **filtered out** (orange) - notice how the
+filtered nuclei pile up in the high-doublet / high-ribo tails. On the pre-filter
+UMAP the filtered-out nuclei form their own fringe territory rather than mixing into
+the healthy populations. Compare this with your own `keep`/`remove` map above: how
+close did you get?""")
+code("""def qc_histograms_reveal(df):
+    metrics = ['doublet_score', 'solo_doublet', 'percent_ribo']
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    for ax, m in zip(axes, metrics):
+        for status, color in [('passed_qc', '#2c7fb8'), ('filtered_out', '#d95f0e')]:
+            ax.hist(df.loc[df['atlas_qc'] == status, m], bins=60, alpha=0.6,
+                    label=status, color=color)
+        ax.set_xlabel(m); ax.set_ylabel('nuclei'); ax.legend()
+    plt.tight_layout(); plt.show()
+
+qc_histograms_reveal(adata.obs)
+
+with plt.rc_context({'figure.figsize': (8, 8)}):
+    sc.pl.embedding(adata, basis='X_umap_prefilter', color='atlas_qc',
+                    title='atlas QC decision (ground truth)',
+                    palette={'passed_qc': '#2c7fb8', 'filtered_out': '#d95f0e'},
+                    size=8)""")
 
 md("""### Keep the clean nuclei
 
@@ -401,14 +425,16 @@ print(adata.obs['leiden'].value_counts())""")
 md("""Plot the UMAP that **you** just computed from the scVI latent. First, colour it
 by your **Leiden clusters** on their own - with so many clusters at `resolution=15`,
 we use the high-contrast `godsnot_102` palette and hide the (very long) legend.""")
-code("""sc.pl.umap(adata, color='leiden', palette=sc.pl.palettes.godsnot_102,
-           legend_loc=None, title='your Leiden clusters')""")
+code("""with plt.rc_context({'figure.figsize': (8, 8)}):
+    sc.pl.umap(adata, color='leiden', palette=sc.pl.palettes.godsnot_102,
+               legend_loc=None, title='your Leiden clusters')""")
 
 md("""Now colour the same UMAP by **species** and by the reference `Class_V2` and
 `Subclass_V2` labels (these are blank/`NaN` for any nuclei without a reference
 annotation).""")
-code("""sc.pl.umap(adata, color=['species', 'Class_V2', 'Subclass_V2'],
-           wspace=0.4, ncols=2)""")
+code("""with plt.rc_context({'figure.figsize': (6, 6)}):
+    sc.pl.umap(adata, color=['species', 'Class_V2', 'Subclass_V2'],
+               wspace=0.4, ncols=2)""")
 
 md("""### Why integrate? scVI vs. a non-corrected PCA embedding
 
@@ -423,11 +449,11 @@ sc.pp.neighbors(adata_hvg, n_neighbors=15, n_pcs=30, random_state=SEED)
 sc.tl.umap(adata_hvg, random_state=SEED)
 adata.obsm['X_umap_pca'] = adata_hvg.obsm['X_umap']
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 sc.pl.embedding(adata, basis='X_umap_pca', color='species', ax=axes[0],
-                show=False, title='PCA on HVGs (not integrated)')
+                show=False, title='PCA on HVGs (not integrated)', size=8)
 sc.pl.umap(adata, color='species', ax=axes[1],
-           show=False, title='scVI-integrated (used for clustering)')
+           show=False, title='scVI-integrated (used for clustering)', size=8)
 plt.tight_layout(); plt.show()""")
 
 # ---- 6. Cluster vs reference --------------------------------------------------
@@ -480,14 +506,68 @@ code("""sc.pl.matrixplot(adata, NT_MARKERS, groupby='Class_V2',
                  standard_scale='var', cmap='viridis',
                  colorbar_title='scaled mean expr.')""")
 
-md("""Finally, let the **data** nominate markers with no prior knowledge. Like the
-manuscript marker figures (`04_marker_figures.ipynb`), we rank the genes that best
-distinguish each reference `Supergroup_V2` cell type (Wilcoxon test) and show the
-single top marker per group.""")
-code("""adata_lab = adata[adata.obs['Supergroup_V2'].notna()].copy()
-adata_lab.obs['Supergroup_V2'] = adata_lab.obs['Supergroup_V2'].cat.remove_unused_categories()
-sc.tl.rank_genes_groups(adata_lab, 'Supergroup_V2', method='wilcoxon')
-sc.pl.rank_genes_groups_dotplot(adata_lab, n_genes=1, standard_scale='var')""")
+md("""Finally, let the **data** nominate **conserved** markers - genes that mark a
+cell type **in every species**, not just on average. For each reference
+`Supergroup_V2` cell type we rank genes (Wilcoxon) **separately within each
+species**, then score each gene by its **minimum** marker score across species: a
+gene only wins if it is strongly enriched in **human and macaque and mouse**.
+A species is **skipped** for a group when that group has **fewer than 20 cells**
+there (too few to rank reliably).""")
+code("""# Conserved markers: rank genes per species, then take the MIN score across
+# species so a gene only wins if it marks the cell type in *every* species.
+GROUPBY = 'Supergroup_V2'
+MIN_CELLS_PER_SPECIES = 20   # skip a species for a group with fewer cells than this
+
+adata_lab = adata[adata.obs[GROUPBY].notna()].copy()
+adata_lab.obs[GROUPBY] = adata_lab.obs[GROUPBY].cat.remove_unused_categories()
+
+# Per-species marker scores (one Wilcoxon ranking within each species), restricted
+# to the groups that pass the cell-count threshold in that species.
+species_scores = {}
+for sp in adata_lab.obs['species'].unique():
+    a_sp = adata_lab[adata_lab.obs['species'] == sp].copy()
+    a_sp.obs[GROUPBY] = a_sp.obs[GROUPBY].cat.remove_unused_categories()
+    counts = a_sp.obs[GROUPBY].value_counts()
+    valid = counts.index[counts >= MIN_CELLS_PER_SPECIES].tolist()
+    if len(valid) < 2:
+        continue  # need at least two groups to rank one against the rest
+    sc.tl.rank_genes_groups(a_sp, GROUPBY, groups=valid, method='wilcoxon')
+    species_scores[sp] = sc.get.rank_genes_groups_df(a_sp, group=None)
+print(f'ranked markers within {len(species_scores)} species: {list(species_scores)}')
+
+# Conserved score for a (group, gene) = min score across the species where the
+# group had >=20 cells; the top-scoring gene is that group's conserved marker.
+conserved_markers = {}
+for g in adata_lab.obs[GROUPBY].cat.categories:
+    cols = [df[df['group'] == g].set_index('names')['scores']
+            for df in species_scores.values() if (df['group'] == g).any()]
+    if not cols:
+        continue  # group never reached 20 cells in any species
+    conserved_markers[g] = pd.concat(cols, axis=1).min(axis=1).idxmax()
+
+for g, gene in conserved_markers.items():
+    print(f'  {g}: {gene}')""")
+
+md("""Now show the conserved-marker panel as **one heatmap per species**. Columns are
+the conserved markers (one per group); rows are individual nuclei, grouped by their
+reference cell type and **scaled 0-1 per gene within each species**. Because the
+same genes light up the same cell types in **human, macaque, and mouse**, the three
+panels share the same block-diagonal pattern - that is what "conserved" looks like.""")
+code("""# Deduplicate markers (two groups can share the same top conserved gene) while
+# preserving their order, so each gene is shown exactly once.
+conserved_genes = list(dict.fromkeys(conserved_markers.values()))
+
+# One heatmap per species so students can eyeball that each marker is enriched in
+# the same cell type across all three species (a shared block-diagonal pattern).
+# We print the species name rather than using suptitle (which overlaps the
+# gene-label axis at the top of scanpy heatmaps).
+for sp in sorted(adata_lab.obs['species'].unique()):
+    print(f'=== {sp} - conserved markers ===')
+    a_sp = adata_lab[adata_lab.obs['species'] == sp].copy()
+    a_sp.obs[GROUPBY] = a_sp.obs[GROUPBY].cat.remove_unused_categories()
+    sc.pl.heatmap(a_sp, conserved_genes, groupby=GROUPBY, standard_scale='var',
+                  cmap='viridis', show_gene_labels=True,
+                  figsize=(max(8, 0.45 * len(conserved_genes)), 6))""")
 
 # ---- 8. Your filtering vs. the reference -------------------------------------
 md("""## 8. Your filtering vs. the reference
@@ -497,22 +577,19 @@ were removed in the published, processed object**. Both are drawn on the same
 pre-filter UMAP so you can see exactly where the two decisions agree and disagree.
 If you tightened or loosened the thresholds in section 3, the left panel will shift
 relative to the right one.""")
-code("""fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-panels = [
-    (axes[0], 'your_qc', 'your filtering (this notebook)',
-     {'keep': '#2c7fb8', 'remove': '#d95f0e'}),
-    (axes[1], 'atlas_qc', 'reference filtering (processed h5ad)',
-     {'passed_qc': '#2c7fb8', 'filtered_out': '#d95f0e'}),
-]
-for ax, col, title, cmap_d in panels:
-    for val, color in cmap_d.items():
-        m = qc_compare[col] == val
-        ax.scatter(qc_compare.loc[m, 'umap1'], qc_compare.loc[m, 'umap2'],
-                   s=4, c=color, label=val, linewidths=0)
-    ax.set_title(title)
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.legend(markerscale=4, loc='best', frameon=False)
-plt.tight_layout(); plt.show()
+code("""# Build a tiny AnnData holding just the pre-filter UMAP + both QC labels so we
+# can reuse the standard scanpy plotting (the working `adata` is now filtered).
+qc_ad = sc.AnnData(obs=qc_compare[['your_qc', 'atlas_qc']].astype('category').copy())
+qc_ad.obsm['X_umap'] = qc_compare[['umap1', 'umap2']].to_numpy(float)
+qc_ad.obs['your_qc']  = qc_ad.obs['your_qc'].cat.set_categories(['keep', 'remove'])
+qc_ad.obs['atlas_qc'] = qc_ad.obs['atlas_qc'].cat.set_categories(['passed_qc', 'filtered_out'])
+qc_ad.uns['your_qc_colors']  = ['#2c7fb8', '#d95f0e']
+qc_ad.uns['atlas_qc_colors'] = ['#2c7fb8', '#d95f0e']
+
+with plt.rc_context({'figure.figsize': (6, 6)}):
+    sc.pl.umap(qc_ad, color=['your_qc', 'atlas_qc'], size=8, wspace=0.3,
+               title=['your filtering (this notebook)',
+                      'reference filtering (processed h5ad)'])
 
 # how often do the two decisions agree?
 agree = ((qc_compare['your_qc'] == 'keep') ==
@@ -555,20 +632,124 @@ md("""## 10. A glimpse of spatial transcriptomics
 
 snRNA-seq tells us **what** cell types exist, but not **where** they sit. Spatial
 methods profile transcripts while preserving tissue coordinates. The workshop ships
-a small spatial example (`/results/SpC_workshop_spatial_example.h5ad`) - the same
-`Class_V2` taxonomy (and colours) mapped onto a spinal-cord section. Plotting the
-cells in their real `(x, y)` positions reproduces the butterfly grey-matter shape,
-with motor neurons in the ventral horn and dorsal-horn populations up top. We will
-dig into this in Session 2.""")
-code("""spatial = sc.read_h5ad('/results/SpC_workshop_spatial_example.h5ad')
-fig, axes = plt.subplots(1, 2, figsize=(15, 7))
-sc.pl.embedding(spatial, basis='X_spatial', color='Class_V2', ax=axes[0],
-                show=False, title='spatial section - Class_V2', size=25)
-sc.pl.embedding(spatial, basis='X_spatial', color='Subclass_V2', ax=axes[1],
-                show=False, title='spatial section - Subclass_V2', size=25)
-for ax in axes:
-    ax.set_aspect('equal')
-plt.tight_layout(); plt.show()""")
+a small spatial example (`/results/SpC_workshop_spatial_example.h5ad`) holding the
+three **representative cross-species sections** (human, macaque, mouse) from the
+manuscript, each mapped onto the same `Group_V2` taxonomy and colours.
+
+We plot every neuron at its real, orientation-corrected `(_plot_x, _plot_y)`
+position - this reproduces the butterfly grey-matter shape, with motor neurons in
+the ventral horn and dorsal-horn populations up top. Non-neurons are drawn as faint
+grey background dots (`SpC_workshop_spatial_nn_overlay.tsv.gz`), and per-section
+crop bounds + the `Group_V2` palette come from `SpC_workshop_spatial_meta.json`.
+This mirrors the Figure 2 section panel; we dig into it in Session 2.""")
+code("""import json
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+
+# ── Load the 3-species spatial example + its companion artifacts ──────────────
+spatial = sc.read_h5ad('/results/SpC_workshop_spatial_example.h5ad')
+spatial_obs = spatial.obs
+
+# The plot uses the transformed coordinates in obs['_plot_x'/'_plot_y']. If you
+# loaded an older/cellxgene-safe object where those obs columns were dropped,
+# fall back to obsm (spatial / X_spatial). If neither is present, the object is
+# stale - re-run processing/02_build_spatial_example.py to regenerate it.
+if not {'_plot_x', '_plot_y'}.issubset(spatial_obs.columns):
+    _coords = spatial.obsm.get('spatial', spatial.obsm.get('X_spatial'))
+    if _coords is None:
+        raise KeyError(
+            "No '_plot_x'/'_plot_y' in obs and no 'spatial' coordinates in obsm - "
+            "regenerate /results/SpC_workshop_spatial_example.h5ad by running "
+            "processing/02_build_spatial_example.py")
+    spatial_obs = spatial_obs.copy()
+    spatial_obs['_plot_x'] = np.asarray(_coords)[:, 0].astype(float)
+    spatial_obs['_plot_y'] = np.asarray(_coords)[:, 1].astype(float)
+if spatial_obs['species'].nunique() < 3:
+    print('WARNING: spatial object has <3 species - it looks stale. Re-run '
+          'processing/02_build_spatial_example.py for the full cross-species panel.')
+
+nn_obs = pd.read_csv('/results/SpC_workshop_spatial_nn_overlay.tsv.gz',
+                     sep='\\t', index_col=0, compression='gzip')
+
+with open('/results/SpC_workshop_spatial_meta.json') as f:
+    _meta = json.load(f)
+rep_example_sections = _meta['representative_sections']     # species -> section id
+rep_crop    = {k: tuple(v) for k, v in _meta['rep_crop'].items()}
+group_color = _meta['group_color']                          # Group_V2 -> hex
+
+# Groups actually present across the three sections, in curated palette order.
+_present = set(spatial_obs['Group_V2'].astype(str))
+groups_ordered = [g for g in group_color if g in _present]
+print(f'{spatial.n_obs:,} neurons across {len(rep_example_sections)} sections, '
+      f'{len(groups_ordered)} Group_V2 types present')""")
+code("""# ── Plot: all Group_V2 cell types in the representative sections ──────────────
+# (Reproduces 03_figure2_plot_panels.ipynb: all groups, representative sections)
+_n_sp = len(rep_example_sections)
+_sp_wh = []
+for _sp in rep_example_sections:
+    _c = rep_crop.get(_sp)
+    if _c is not None:
+        _sp_wh.append((abs(_c[1] - _c[0]), abs(_c[3] - _c[2])))
+    else:
+        _ss = spatial_obs[spatial_obs['_section'].astype(str) == rep_example_sections[_sp]]
+        _sp_wh.append((max(float(_ss['_plot_x'].astype(float).max()
+                                 - _ss['_plot_x'].astype(float).min()), 1.0),
+                       max(float(_ss['_plot_y'].astype(float).max()
+                                 - _ss['_plot_y'].astype(float).min()), 1.0)))
+_fig_h_sp = 7.0
+_w_ratios_sp = [w / h for w, h in _sp_wh]
+_fig_w_sp = _fig_h_sp * (sum(_w_ratios_sp) + 0.02 * max(_n_sp - 1, 0))
+
+fig, axes = plt.subplots(1, _n_sp, figsize=(_fig_w_sp, _fig_h_sp), squeeze=False,
+                         gridspec_kw={'width_ratios': _w_ratios_sp})
+axes = list(axes[0])
+fig.subplots_adjust(wspace=0.02)
+
+for ax, (species, sec) in zip(axes, rep_example_sections.items()):
+    sub = spatial_obs[spatial_obs['_section'].astype(str) == sec].copy()
+    if len(sub) == 0:
+        ax.set_title(f'{species} - no cells found'); ax.axis('off'); continue
+
+    sub = sub[sub['rexed_lamina'].astype(str) != '']
+    xl  = sub['_plot_x'].values.astype(float)
+    yl  = sub['_plot_y'].values.astype(float)
+    grp = sub['Group_V2'].astype(str).values
+
+    # Non-neurons: small grey background dots
+    _nn_sec = nn_obs[nn_obs['_section'].astype(str) == sec]
+    if len(_nn_sec):
+        ax.scatter(_nn_sec['_plot_x'].values.astype(float),
+                   _nn_sec['_plot_y'].values.astype(float),
+                   s=4., c='#b8b8b8', linewidths=0, alpha=0.25, rasterized=True)
+
+    for gname in groups_ordered:
+        m = grp == gname
+        if m.any():
+            ax.scatter(xl[m], yl[m], s=15., c=[group_color[gname]],
+                       linewidths=0, alpha=0.9, rasterized=True)
+
+    ax.set_aspect('equal'); ax.invert_yaxis()
+    crop = rep_crop.get(species)
+    if crop is not None:
+        _x0, _x1, _ytop, _ybot_ext = crop
+        ax.set_xlim(_x0, _x1)
+        ax.set_ylim(_ybot_ext, _ytop)
+    ax.set_title(f'{species.capitalize()}\\n{len(sub):,} cells in labeled laminae',
+                 fontsize=9)
+    ax.add_artist(AnchoredSizeBar(
+        ax.transData, 500, '500 \u00b5m', loc='lower right', pad=0.3,
+        color='black', frameon=False, size_vertical=20,
+        fontproperties=fm.FontProperties(size=7)))
+    ax.set_axis_off()
+
+handles = [mpatches.Patch(color=group_color[g], label=g) for g in groups_ordered]
+fig.legend(handles, [h.get_label() for h in handles], loc='lower center', ncol=4,
+           fontsize=6, title='Group_V2', title_fontsize=8,
+           bbox_to_anchor=(0.5, -0.35), framealpha=0.9)
+fig.suptitle('All Cell-Type Groups - Representative Cross-Species Sections',
+             fontsize=13)
+plt.show()""")
 
 # ---- 11. Interactive atlases --------------------------------------------------
 md("""## 11. Explore the data interactively

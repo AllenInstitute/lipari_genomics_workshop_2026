@@ -12,8 +12,10 @@ pip install -r requirements.txt
 The student notebook only needs the "core" + "Jupyter" packages; `torch` /
 `scvi-tools` (bottom of `requirements.txt`) are required **only** to re-run the
 GPU rebuild script `01b`. To run the seminar on a new machine you need the repo
-plus the two input objects in `/results/` (`SpC_workshop_snRNA.h5ad`,
-`SpC_workshop_spatial_example.h5ad`); the notebook regenerates everything else.
+plus the input objects in `/results/` (`SpC_workshop_snRNA.h5ad`,
+`SpC_workshop_spatial_example.h5ad` and its two spatial companions
+`SpC_workshop_spatial_nn_overlay.tsv.gz` / `SpC_workshop_spatial_meta.json`);
+the notebook regenerates everything else.
 Keep **~16 GB free on the `/results` volume** — the notebook writes a ~6 GB
 processed object plus a ~3 GB cellxgene copy (and a same-volume temp copy).
 
@@ -40,7 +42,9 @@ Built by the processing scripts and written to `/results/` (where cellxgene read
 |------|------------|
 | `SpC_workshop_snRNA.h5ad` | Multi-species snRNA subsample: ≤100 nuclei per `Group_V2` per species that **passed** QC, **plus** QC-failed nuclei making up **40%** of the object (`obs['qc_status']`). Raw counts in `X`. Two embeddings computed on the **full (pre-filter)** set so students can see where filtered vs. unfiltered nuclei land: `obsm['X_scVI']` / `obsm['X_umap_prefilter']` (trained on this subset by `01b`) and `obsm['X_scVI_atlas']` / `obsm['X_umap_atlas']` (published atlas, for comparison). Carries precomputed QC inputs (`doublet_score`, `solo_doublet`, `percent_ribo`, `log.gene.counts.0`) and propagated taxonomy (`Class_propagated`, `Subclass_propagated`, `Group_propagated`, `leiden`) for **every** nucleus, enabling class-specific QC. |
 | `SpC_workshop_scvi_model/` | The trained scVI model behind `X_scVI` / `X_umap_prefilter`, saved so the embedding is reproducible and new cells can be projected without a GPU. |
-| `SpC_workshop_spatial_example.h5ad` | One representative macaque MERFISH section with `obsm['spatial']` and V2 / Rexed-lamina annotations. |
+| `SpC_workshop_spatial_example.h5ad` | The three representative cross-species sections (human, macaque, mouse) from the manuscript Figure 2, concatenated. Transformed tissue coordinates in `obs['_plot_x'/'_plot_y']` (mirrored into `obsm['spatial']`) plus V2 / Rexed-lamina annotations and the curated `Group_V2` palette in `uns`. |
+| `SpC_workshop_spatial_nn_overlay.tsv.gz` | Non-neuron cells (coordinates + `Group_V2`) for those three sections, drawn as the faint grey tissue background in the spatial panel. |
+| `SpC_workshop_spatial_meta.json` | Per-section crop bounds, the representative-section ids, and the full `Group_V2` colour map used by the spatial panel. |
 
 ### Rebuild
 ```bash

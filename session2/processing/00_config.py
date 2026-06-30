@@ -49,11 +49,27 @@ WB_CLASS_LEVEL = 'class_label'
 # A NEW cell_type_mapper reference built from the AIBS consensus SpC taxonomy
 # (hierarchy Class→Subclass→Group→consensus_cluster). 02_build_spc_reference.sh
 # (re)builds it from the source h5ad; a pre-built copy already lives on /scratch.
+# NOTE: its Group/Class *names* differ from the Session-1 V2 taxonomy (only
+# Subclass names line up), so it is kept for reference but the reverse arms now
+# map onto the V2 reference below instead.
 SPC_CONSENSUS_H5AD = (
     '/data/SpinalCord/manuscript/RNA/'
     'AIBS_SpC_consensus_taxonomy_harmonized_AIT-pre-print.h5ad')
 SPC_CONSENSUS_HIERARCHY = ['Class', 'Subclass', 'Group', 'consensus_cluster']
 SPC_CONSENSUS_REF = '/scratch/SpC_consensus_ref'
+
+# ── V2 reverse reference: OUR HMBA Session-1 taxonomy (Class_V2→Subclass_V2→
+# Group_V2), built directly from the workshop query so the reverse arm speaks the
+# SAME V2 vocabulary as the forward labels. This is what lets us reciprocate
+# Subclass↔Subclass_V2 (subclass arm) and Supertype↔Group_V2 (supertype arm);
+# the consensus taxonomy's Group names do NOT match Group_V2. Built by
+# 02b_build_spc_v2_reference.py, which writes the V2 labels into plain
+# Class/Subclass/Group columns (so the level names below stay valid).
+SPC_V2_REF = '/scratch/SpC_V2_ref'
+SPC_V2_SOURCE_H5AD = QUERY_H5AD
+SPC_V2_HIERARCHY = ['Class', 'Subclass', 'Group']
+# The reverse arms (03, 06) map mouse-WB means onto this reference.
+SPC_REF = SPC_V2_REF
 # Taxonomy levels in the reverse result we care about (readable node names).
 SPC_GROUP_LEVEL = 'Group'
 SPC_SUBCLASS_LEVEL = 'Subclass'
@@ -113,8 +129,12 @@ REV_SUPERTYPE_RESULTS_JSON = os.path.join(
 SUBCLASS_OVERLAP_CSV = os.path.join(RESULTS_DIR, 'reciprocal_subclass_overlap.csv')
 RECIPROCAL_SUPERTYPE_CSV = os.path.join(
     RESULTS_DIR, 'reciprocal_supertype_hits.csv')
-# Overlap-coefficient threshold above which a pair counts as "reciprocally mapped".
-OVERLAP_MIN = 0.20
+# Reciprocity gate: minimum **Wilson lower-bound** of the overlap coefficient
+# above which a pair counts as "reciprocally mapped". The lower bound discounts
+# overlaps backed by few spinal cells (n_spc_cells), so raise/lower this to make
+# the gate stricter/looser. WILSON_Z sets the confidence (1.96 ≈ 95%).
+OVERLAP_MIN = 0.50
+WILSON_Z = 1.96
 ATLAS_SUPERTYPE_KEY = 'supertype'
 
 # Confidence floor used when summarising mappings (drop very low-prob calls).

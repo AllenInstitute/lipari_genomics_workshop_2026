@@ -74,14 +74,18 @@ def main():
         fwd, qobs, rev,
         query_subclass_key=cfg.QUERY_SUBCLASS_KEY,
         wb_subclass_level=cfg.WB_SUBCLASS_LEVEL,
-        rev_subclass_level=cfg.SPC_SUBCLASS_LEVEL)
+        rev_subclass_level=cfg.SPC_SUBCLASS_LEVEL,
+        overlap_min=cfg.OVERLAP_MIN,
+        z=cfg.WILSON_Z)
     reciprocal.to_csv(cfg.RECIPROCAL_CSV)
     n_recip = int(reciprocal['reciprocal'].sum())
     print('  wrote', cfg.RECIPROCAL_CSV, reciprocal.shape,
           f'({n_recip} reciprocal mouse-WB subclasses)')
     print('\nReciprocal mouse-WB subclasses (forward & reverse agree on spinal '
-          'Subclass), top 20 by SpC cells:')
-    cols = ['n_spc_cells', 'fwd_spc_subclass', 'rev_spc_subclass', 'rev_spc_group']
+          'Subclass, support-discounted overlap_lb >= '
+          f'{cfg.OVERLAP_MIN}), top 20 by SpC cells:')
+    cols = ['n_spc_cells', 'fwd_spc_subclass', 'overlap', 'overlap_lb',
+            'rev_spc_subclass', 'rev_spc_group']
     print(reciprocal[reciprocal['reciprocal']].head(20)[cols].to_string())
 
 

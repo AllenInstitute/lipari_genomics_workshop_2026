@@ -410,6 +410,8 @@ def reciprocal_by_wb_subclass(
     wb_subclass_level: str = "subclass_label",
     rev_subclass_level: str = "Subclass",
     min_cells: int = 1,
+    overlap_min: float = 0.0,
+    z: float = 1.96,
 ) -> pd.DataFrame:
     """Reciprocal correspondence, pivoted on each mouse-WB **subclass** M.
 
@@ -419,17 +421,26 @@ def reciprocal_by_wb_subclass(
         **Subclass** (``fwd_spc_subclass``); this is the spinal type that most
         "votes" for M.
       * REVERSE — the spinal **Subclass** that M maps back to when projected onto
-        our consensus reference (``rev_spc_subclass``).
+        our V2 reference (``rev_spc_subclass``).
 
-    M is a **reciprocal** hit when those agree (after ``normalize_label``). We
-    anchor on Subclass because it is the level the two spinal taxonomies share
-    cleanly (Glut-D/M/V, GABA-D/M/V, Astro, Oligo, OPC…), unlike Group/Class.
+    M is a **reciprocal** hit when those agree (after ``normalize_label``) **and**
+    the forward vote clears a support-discounted gate. We anchor on Subclass
+    because it is the level the two spinal taxonomies share cleanly (Glut-D/M/V,
+    GABA-D/M/V, Astro, Oligo, OPC…), unlike Group/Class.
+
+    The forward signal is graded by ``overlap_lb`` — the Wilson lower confidence
+    bound on the modal-vote fraction ``p = (cells voting for fwd_spc) /
+    n_spc_cells`` with ``n = n_spc_cells``. This mirrors the overlap-coefficient
+    arms: a mouse subclass backed by only a handful of spinal cells (or whose
+    votes are diffuse) gets a low ``overlap_lb`` and is not called reciprocal when
+    ``overlap_min > 0``.
 
     Returns
     -------
     DataFrame indexed by mouse-WB subclass with columns ``n_spc_cells``,
-    ``fwd_spc_subclass``, ``rev_spc_subclass``, ``rev_spc_group``,
-    ``reciprocal`` (bool), sorted by ``n_spc_cells`` descending.
+    ``fwd_spc_subclass``, ``overlap``, ``overlap_lb``, ``rev_spc_subclass``,
+    ``rev_spc_group``, ``reciprocal`` (bool), sorted by ``n_spc_cells``
+    descending.
     """
     df = query_obs[[query_subclass_key]].join(
         mapping_df[[wb_subclass_level]], how="inner")
@@ -438,19 +449,26 @@ def reciprocal_by_wb_subclass(
     rev_sub = reverse_df[rev_subclass_level]
     rev_grp = reverse_df["Group"] if "Group" in reverse_df.columns else None
     for m, sub in df.groupby(wb_subclass_level, observed=True):
-        if len(sub) < min_cells:
+        n = int(len(sub))
+        if n < min_cells:
             continue
-        fwd_spc = sub[query_subclass_key].value_counts().index[0]
+        vc = sub[query_subclass_key].value_counts()
+        fwd_spc = vc.index[0]
+        frac = float(vc.iloc[0]) / n
+        overlap_lb = wilson_lower_bound(frac, n, z=z)
         rev_spc = rev_sub.get(m, None)
-        recip = (rev_spc is not None
+        agree = (rev_spc is not None
                  and normalize_label(fwd_spc) == normalize_label(rev_spc))
+        recip = bool(agree and overlap_lb >= overlap_min)
         rows.append({
             wb_subclass_level: m,
-            "n_spc_cells": int(len(sub)),
+            "n_spc_cells": n,
             "fwd_spc_subclass": fwd_spc,
+            "overlap": round(frac, 4),
+            "overlap_lb": round(overlap_lb, 4),
             "rev_spc_subclass": rev_spc,
             "rev_spc_group": (rev_grp.get(m, None) if rev_grp is not None else None),
-            "reciprocal": bool(recip),
+            "reciprocal": recip,
         })
     return pd.DataFrame(rows).set_index(wb_subclass_level).sort_values(
         "n_spc_cells", ascending=False)
@@ -479,6 +497,30 @@ def _legacy_build_reciprocal_table(
 # ---------------------------------------------------------------------------
 # OVERLAP-COEFFICIENT reciprocity (subclass & supertype)
 # ---------------------------------------------------------------------------
+def wilson_lower_bound(p: float, n: int, z: float = 1.96) -> float:
+    """Wilson score **lower** confidence bound of a binomial proportion.
+
+    Treats an overlap value ``p`` as a proportion estimated from ``n`` trials
+    (here ``n = min(|A|, |B|)``, the denominator of the overlap coefficient) and
+    returns the lower end of its ``z``-confidence interval::
+
+        LB = (p + z²/2n − z·√( p(1−p)/n + z²/4n² )) / (1 + z²/n)
+
+    This shrinks small-``n`` estimates toward 0 (an overlap of 1.0 from a handful
+    of cells is heavily discounted) while leaving well-supported overlaps almost
+    unchanged, so it down-weights mouse-WB subclasses backed by few spinal cells.
+    ``z = 1.96`` ≈ 95% confidence; larger ``z`` penalizes low ``n`` more.
+    """
+    if n <= 0:
+        return 0.0
+    p = min(max(float(p), 0.0), 1.0)
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    centre = p + z2 / (2.0 * n)
+    margin = z * np.sqrt(p * (1.0 - p) / n + z2 / (4.0 * n * n))
+    return float(max(0.0, (centre - margin) / denom))
+
+
 def overlap_coefficient_matrix(
     mapping_df: pd.DataFrame,
     query_obs: pd.DataFrame,
@@ -512,6 +554,45 @@ def overlap_coefficient_matrix(
     return pd.DataFrame(oc, index=ct.index, columns=ct.columns)
 
 
+def forward_best_partner(
+    mapping_df: pd.DataFrame,
+    query_obs: pd.DataFrame,
+    query_label_key: str,
+    wb_subclass_level: str = "subclass_label",
+    wilson_z: float = 1.96,
+) -> pd.DataFrame:
+    """Per mouse-WB subclass M: the spinal label (at ``query_label_key``
+    granularity — e.g. ``Subclass_V2`` or ``Group_V2``) with the highest forward
+    overlap coefficient, plus the raw overlap, its **Wilson lower bound**, and the
+    support ``n = min(|A|, |B|)``.
+
+    Returns a DataFrame indexed by ``wb_subclass_level`` with columns
+    ``best_spc``, ``overlap``, ``overlap_lb``, ``n_spc_cells``, ``n_support``.
+    """
+    oc = overlap_coefficient_matrix(
+        mapping_df, query_obs, query_label_key, wb_subclass_level)
+    joined = query_obs[[query_label_key]].join(
+        mapping_df[[wb_subclass_level]], how="inner").dropna(
+        subset=[query_label_key, wb_subclass_level])
+    a_sizes = joined[query_label_key].value_counts()   # |A| per spinal label
+    b_sizes = joined[wb_subclass_level].value_counts()  # |B| per mouse-WB subclass
+    rows = []
+    for m in oc.columns:
+        col = oc[m]
+        best = col.idxmax()
+        ov = float(col.max())
+        n_support = int(min(a_sizes.get(best, 0), b_sizes.get(m, 0)))
+        rows.append({
+            wb_subclass_level: m,
+            "best_spc": best,
+            "overlap": ov,
+            "overlap_lb": wilson_lower_bound(ov, n_support, z=wilson_z),
+            "n_spc_cells": int(b_sizes.get(m, 0)),
+            "n_support": n_support,
+        })
+    return pd.DataFrame(rows).set_index(wb_subclass_level)
+
+
 def reciprocal_subclass_overlap(
     mapping_df: pd.DataFrame,
     query_obs: pd.DataFrame,
@@ -519,96 +600,106 @@ def reciprocal_subclass_overlap(
     query_subclass_key: str,
     wb_subclass_level: str = "subclass_label",
     rev_subclass_level: str = "Subclass",
+    rev_group_level: str = "Group",
     min_overlap: float = 0.20,
+    wilson_z: float = 1.96,
 ) -> pd.DataFrame:
-    """Per mouse-WB subclass M: its best spinal partner by overlap coefficient,
-    and whether the reverse map agrees (graded reciprocity).
-
-    Combines the forward overlap-coefficient matrix with the reverse assignment:
+    """Per mouse-WB subclass M: its best spinal **subclass** partner by overlap
+    coefficient, and whether the reverse map agrees (graded reciprocity).
 
       * ``fwd_spc_subclass`` / ``overlap`` — the spinal subclass with the highest
-        OC to M (the forward "best partner") and that OC value.
+        OC to M (the forward "best partner") and that raw OC value.
+      * ``overlap_lb`` — the **Wilson lower confidence bound** of ``overlap`` given
+        ``n = min(|A|, |B|)`` cells of support. This discounts overlaps backed by
+        few spinal cells, so a mouse-WB subclass that only a handful of spinal
+        nuclei mapped to no longer scores ~1.0.
       * ``rev_spc_subclass`` — the spinal subclass M maps back to (reverse arm).
       * ``reciprocal`` — both arms name the same spinal subclass **and**
-        ``overlap ≥ min_overlap``.
+        ``overlap_lb >= min_overlap``.
 
-    Returns a DataFrame indexed by mouse-WB subclass, sorted by ``overlap``.
+    Returns a DataFrame indexed by mouse-WB subclass, sorted by ``overlap_lb``.
     """
-    oc = overlap_coefficient_matrix(
-        mapping_df, query_obs, query_subclass_key, wb_subclass_level)
-    n_cells = query_obs[[query_subclass_key]].join(
-        mapping_df[[wb_subclass_level]], how="inner")[wb_subclass_level].value_counts()
+    fwd = forward_best_partner(
+        mapping_df, query_obs, query_subclass_key, wb_subclass_level, wilson_z)
     rev_sub = reverse_df[rev_subclass_level]
-    rev_grp = reverse_df["Group"] if "Group" in reverse_df.columns else None
+    rev_grp = reverse_df[rev_group_level] if rev_group_level in reverse_df.columns else None
     rows = []
-    for m in oc.columns:
-        col = oc[m]
-        fwd_spc = col.idxmax()
-        ov = float(col.max())
+    for m in fwd.index:
+        fwd_spc = fwd.at[m, "best_spc"]
+        ov = float(fwd.at[m, "overlap"])
+        ov_lb = float(fwd.at[m, "overlap_lb"])
         rev_spc = rev_sub.get(m, None)
         recip = (rev_spc is not None
                  and normalize_label(fwd_spc) == normalize_label(rev_spc)
-                 and ov >= min_overlap)
+                 and ov_lb >= min_overlap)
         rows.append({
             wb_subclass_level: m,
-            "n_spc_cells": int(n_cells.get(m, 0)),
+            "n_spc_cells": int(fwd.at[m, "n_spc_cells"]),
             "fwd_spc_subclass": fwd_spc,
             "overlap": ov,
+            "overlap_lb": ov_lb,
             "rev_spc_subclass": rev_spc,
             "rev_spc_group": (rev_grp.get(m, None) if rev_grp is not None else None),
             "reciprocal": bool(recip),
         })
     return pd.DataFrame(rows).set_index(wb_subclass_level).sort_values(
-        "overlap", ascending=False)
+        "overlap_lb", ascending=False)
 
 
 def reciprocal_supertypes(
     reverse_supertype_df: pd.DataFrame,
     supertype_to_subclass: pd.DataFrame,
-    subclass_overlap: pd.DataFrame,
-    rev_subclass_level: str = "Subclass",
+    fwd_group_overlap: pd.DataFrame,
+    rev_group_level: str = "Group",
     min_overlap: float = 0.20,
 ) -> pd.DataFrame:
-    """Per mouse-WB **supertype** T: is it reciprocally mapped to a spinal type?
+    """Per mouse-WB **supertype** T: is it reciprocally mapped to a spinal
+    **Group** (the finer ``Group_V2`` level)?
 
-    A supertype inherits its forward signal from its parent **subclass** M (the
-    forward map only resolves to subclass), but carries its **own** reverse
-    assignment (``reverse_supertype_df``, from ``06_map_wb_supertype_to_spc.py``).
-    T is reciprocal when the spinal subclass it maps back to equals the forward
-    best-partner spinal subclass of its parent M, and M's forward overlap clears
-    ``min_overlap``::
+    The forward map only resolves mouse-WB to **subclass**, so a supertype T
+    inherits its forward signal from its parent subclass M — specifically the
+    spinal **Group** that M's cells overlap most (``fwd_group_overlap``, built by
+    :func:`forward_best_partner` with the ``Group_V2`` query label). T carries its
+    **own** reverse assignment at Group resolution (``reverse_supertype_df``, from
+    ``06_map_wb_supertype_to_spc.py`` against the V2 reference). T is reciprocal
+    when those agree and the forward overlap (after the Wilson lower-bound support
+    discount) clears ``min_overlap``::
 
-        reciprocal(T) = [ rev_spc_subclass(T) == fwd_spc_subclass(parent M) ]
-                        and [ overlap(parent M) >= min_overlap ]
+        reciprocal(T) = [ rev_spc_group(T) == fwd_spc_group(parent M) ]
+                        and [ overlap_lb(parent M) >= min_overlap ]
 
     Parameters
     ----------
-    subclass_overlap : DataFrame from :func:`reciprocal_subclass_overlap`, indexed
-        by mouse-WB subclass (provides ``fwd_spc_subclass`` and ``overlap`` per M).
+    fwd_group_overlap : DataFrame from :func:`forward_best_partner` at the
+        ``Group_V2`` granularity, indexed by mouse-WB subclass (provides
+        ``best_spc`` = the forward best spinal Group, ``overlap``, ``overlap_lb``).
 
     Returns a DataFrame indexed by supertype with the parent subclass, both
-    directions, ``overlap`` (inherited from M), and ``reciprocal``.
+    directions (``fwd_spc_group`` / ``rev_spc_group``), ``overlap`` /
+    ``overlap_lb`` (inherited from M), and ``reciprocal``.
     """
     parent = supertype_to_subclass["subclass_label"]
-    rev_sub = reverse_supertype_df[rev_subclass_level]
+    rev_grp = reverse_supertype_df[rev_group_level]
     rows = []
     for t in reverse_supertype_df.index:
         m = parent.get(t, None)
-        if m is None or m not in subclass_overlap.index:
+        if m is None or m not in fwd_group_overlap.index:
             continue
-        fwd_spc = subclass_overlap.at[m, "fwd_spc_subclass"]
-        ov = float(subclass_overlap.at[m, "overlap"])
-        rev_spc = rev_sub.get(t, None)
-        recip = (rev_spc is not None
-                 and normalize_label(rev_spc) == normalize_label(fwd_spc)
-                 and ov >= min_overlap)
+        fwd_grp = fwd_group_overlap.at[m, "best_spc"]
+        ov = float(fwd_group_overlap.at[m, "overlap"])
+        ov_lb = float(fwd_group_overlap.at[m, "overlap_lb"])
+        rev_grp_t = rev_grp.get(t, None)
+        recip = (rev_grp_t is not None
+                 and normalize_label(rev_grp_t) == normalize_label(fwd_grp)
+                 and ov_lb >= min_overlap)
         rows.append({
             "supertype": t,
             "parent_wb_subclass": m,
-            "fwd_spc_subclass": fwd_spc,
-            "rev_spc_subclass": rev_spc,
+            "fwd_spc_group": fwd_grp,
+            "rev_spc_group": rev_grp_t,
             "overlap": ov,
+            "overlap_lb": ov_lb,
             "reciprocal": bool(recip),
         })
     return pd.DataFrame(rows).set_index("supertype").sort_values(
-        "overlap", ascending=False)
+        "overlap_lb", ascending=False)

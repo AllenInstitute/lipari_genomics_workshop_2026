@@ -25,12 +25,24 @@ FILTERED_H5AD = (
     '/scratch/multispecies_integrated_realigned_qcfiltered_SpC_scvi_'
     'final_cluster_manual_annotations_mnqcfiltered.h5ad'
 )
-SPATIAL_EXAMPLE_DIR = (
-    '/data/SpinalCord/review_integrated/nnn_clusters/spatial/'
-    'manuscript_ready/example_sections'
+SPATIAL_MANUSCRIPT_DIR = (
+    '/data/SpinalCord/review_integrated/nnn_clusters/spatial/manuscript_ready'
 )
-# Single representative section used as the spatial teaching example (macaque L3).
-SPATIAL_EXAMPLE_SECTION = 'macaque_example_section.h5ad'
+SPATIAL_EXAMPLE_DIR = os.path.join(SPATIAL_MANUSCRIPT_DIR, 'example_sections')
+# The three representative cross-species sections (human / macaque / mouse) that
+# the manuscript Figure 2 plots side-by-side. The workshop spatial teaser mirrors
+# that panel, so we load all three rather than a single section.
+SPATIAL_EXAMPLE_SECTIONS = {
+    'human':   'human_example_section.h5ad',
+    'macaque': 'macaque_example_section.h5ad',
+    'mouse':   'mouse_example_section.h5ad',
+}
+# Manuscript metadata reused for the spatial teaser (crop bounds, section ids,
+# non-neuron overlay, and the curated Group_V2 palette). These mirror the inputs
+# used by 03_figure2_plot_panels.ipynb.
+SPATIAL_SECTION_META = os.path.join(SPATIAL_MANUSCRIPT_DIR, 'section_metadata.json')
+SPATIAL_NN_OVERLAY = os.path.join(SPATIAL_MANUSCRIPT_DIR, 'nn_obs_overlay.tsv.gz')
+SPATIAL_GROUP_COLORS = os.path.join(SPATIAL_MANUSCRIPT_DIR, 'group_colors.json')
 
 # Canonical source for the curated V2 taxonomy colours (uns['<col>_colors']).
 # This is the injury-excluded object the manuscript figures are coloured from; we
@@ -50,6 +62,12 @@ SPECIES_KEY = 'species'
 RESULTS_DIR = '/results'
 SNRNA_OUT = os.path.join(RESULTS_DIR, 'SpC_workshop_snRNA.h5ad')
 SPATIAL_OUT = os.path.join(RESULTS_DIR, 'SpC_workshop_spatial_example.h5ad')
+# Companion artifacts for the 3-species spatial teaser (non-neuron grey overlay
+# and a small metadata json with crop bounds + the Group_V2 palette), so the
+# student notebook can reproduce the manuscript section panel from /results only.
+SPATIAL_NN_OVERLAY_OUT = os.path.join(
+    RESULTS_DIR, 'SpC_workshop_spatial_nn_overlay.tsv.gz')
+SPATIAL_META_OUT = os.path.join(RESULTS_DIR, 'SpC_workshop_spatial_meta.json')
 
 # Annotation columns copied from the filtered object onto kept cells.
 V2_ANNOTATION_COLS = ['Class_V2', 'Subclass_V2', 'Supergroup_V2', 'Group_V2']
@@ -83,6 +101,20 @@ SCVI_UMAP_KEY = 'X_umap_prefilter'
 # Trained scVI model is saved here so the workshop UMAP/latent can be reproduced
 # (or new query cells projected) without retraining.
 SCVI_MODEL_DIR = os.path.join(RESULTS_DIR, 'SpC_workshop_scvi_model')
+
+# ── Session-2 clean object (built by 02b_build_session2_clean.py) ──────────────
+# A CLEAN, atlas-filtered object (keep only nuclei the published atlas passed) on
+# which we retrain scVI from scratch and recompute a UMAP. This is the starting
+# point for Session 2 (mapping / annotation), so it carries NO QC-failed nuclei
+# and a freshly integrated latent space. Both a full processed copy and a
+# cellxgene-safe copy are written to /results.
+SESSION2_OUT = os.path.join(RESULTS_DIR, 'SpC_workshop_snRNA_session2_clean.h5ad')
+SESSION2_CELLXGENE_OUT = os.path.join(
+    RESULTS_DIR, 'SpC_workshop_snRNA_session2_clean_cellxgene.h5ad')
+SESSION2_SCVI_MODEL_DIR = os.path.join(RESULTS_DIR, 'SpC_workshop_session2_scvi_model')
+# Latent / UMAP keys written into the clean object.
+SESSION2_LATENT_KEY = 'X_scVI'
+SESSION2_UMAP_KEY = 'X_umap'
 
 
 def set_all_seeds(seed: int = SEED) -> None:

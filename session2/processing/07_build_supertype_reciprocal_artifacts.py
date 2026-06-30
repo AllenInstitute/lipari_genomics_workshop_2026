@@ -47,6 +47,7 @@ def main():
                for x in f['obs']['_index'][:]]
         qobs = pd.DataFrame({
             cfg.QUERY_SUBCLASS_KEY: read_obs_column(f, cfg.QUERY_SUBCLASS_KEY).values,
+            cfg.QUERY_GROUP_KEY: read_obs_column(f, cfg.QUERY_GROUP_KEY).values,
         }, index=idx)
 
     # ── REVERSE (subclass) ─────────────────────────────────────────────────────
@@ -54,16 +55,19 @@ def main():
         cfg.REV_RESULTS_JSON,
         levels=[cfg.SPC_CLASS_LEVEL, cfg.SPC_SUBCLASS_LEVEL, cfg.SPC_GROUP_LEVEL])
 
+    # Subclass arm: mouse-WB subclass <-> spinal Subclass_V2.
     sub_overlap = mio.reciprocal_subclass_overlap(
         fwd, qobs, rev,
         query_subclass_key=cfg.QUERY_SUBCLASS_KEY,
         wb_subclass_level=cfg.WB_SUBCLASS_LEVEL,
         rev_subclass_level=cfg.SPC_SUBCLASS_LEVEL,
-        min_overlap=cfg.OVERLAP_MIN)
+        rev_group_level=cfg.SPC_GROUP_LEVEL,
+        min_overlap=cfg.OVERLAP_MIN,
+        wilson_z=cfg.WILSON_Z)
     sub_overlap.to_csv(cfg.SUBCLASS_OVERLAP_CSV)
     n_sub = int(sub_overlap['reciprocal'].sum())
     print(f'wrote {cfg.SUBCLASS_OVERLAP_CSV}  ({n_sub} reciprocal subclasses '
-          f'at overlap >= {cfg.OVERLAP_MIN})')
+          f'at overlap_lb >= {cfg.OVERLAP_MIN})')
 
     # ── REVERSE (supertype) + reciprocity ──────────────────────────────────────
     rev_st = mio.load_mapping_results(
@@ -71,16 +75,22 @@ def main():
         levels=[cfg.SPC_CLASS_LEVEL, cfg.SPC_SUBCLASS_LEVEL, cfg.SPC_GROUP_LEVEL])
     st2sc = pd.read_csv(cfg.WB_SUPERTYPE_TO_SUBCLASS_CSV, index_col=0)
 
+    # Supertype arm: mouse-WB supertype <-> spinal Group_V2 (finer than subclass).
+    # Forward best spinal Group per mouse-WB subclass (parent of each supertype).
+    fwd_group = mio.forward_best_partner(
+        fwd, qobs, cfg.QUERY_GROUP_KEY,
+        wb_subclass_level=cfg.WB_SUBCLASS_LEVEL, wilson_z=cfg.WILSON_Z)
     st_recip = mio.reciprocal_supertypes(
-        rev_st, st2sc, sub_overlap,
-        rev_subclass_level=cfg.SPC_SUBCLASS_LEVEL,
+        rev_st, st2sc, fwd_group,
+        rev_group_level=cfg.SPC_GROUP_LEVEL,
         min_overlap=cfg.OVERLAP_MIN)
     st_recip.to_csv(cfg.RECIPROCAL_SUPERTYPE_CSV)
     n_st = int(st_recip['reciprocal'].sum())
     print(f'wrote {cfg.RECIPROCAL_SUPERTYPE_CSV}  ({n_st} reciprocal supertypes '
-          f'of {len(st_recip)} at overlap >= {cfg.OVERLAP_MIN})')
+          f'of {len(st_recip)} at overlap_lb >= {cfg.OVERLAP_MIN})')
 
-    cols = ['parent_wb_subclass', 'fwd_spc_subclass', 'rev_spc_subclass', 'overlap']
+    cols = ['parent_wb_subclass', 'fwd_spc_group', 'rev_spc_group',
+            'overlap', 'overlap_lb']
     print('\nTop reciprocal supertypes by overlap:')
     print(st_recip[st_recip['reciprocal']].head(15)[cols].to_string())
 

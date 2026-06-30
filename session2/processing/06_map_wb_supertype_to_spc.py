@@ -54,11 +54,11 @@ def main():
     if not os.path.exists(cfg.WB_SUPERTYPE_MEANS_H5AD):
         sys.exit('Supertype means missing — run 05_build_supertype_means.py first: '
                  + cfg.WB_SUPERTYPE_MEANS_H5AD)
-    if not (os.path.exists(os.path.join(cfg.SPC_CONSENSUS_REF, 'precompute_stats.h5'))
-            and os.path.exists(os.path.join(cfg.SPC_CONSENSUS_REF, 'reference_markers.h5'))):
-        sys.exit('SpC consensus reference missing — run 02_build_spc_reference.sh first: '
-                 + cfg.SPC_CONSENSUS_REF)
-    run_mapper(cfg.WB_SUPERTYPE_MEANS_H5AD, cfg.SPC_CONSENSUS_REF,
+    if not (os.path.exists(os.path.join(cfg.SPC_REF, 'precompute_stats.h5'))
+            and os.path.exists(os.path.join(cfg.SPC_REF, 'reference_markers.h5'))):
+        sys.exit('SpC V2 reference missing — run 02b_build_spc_v2_reference.py first: '
+                 + cfg.SPC_REF)
+    run_mapper(cfg.WB_SUPERTYPE_MEANS_H5AD, cfg.SPC_REF,
                cfg.REV_SUPERTYPE_MAPPING_DIR)
     print('DONE.')
 
