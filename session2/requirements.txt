@@ -1,0 +1,30 @@
+# Session 2 — Reciprocal mapping: spinal cord ↔ mouse whole brain
+# Pinned to the versions used to build and validate the workshop notebook.
+# Install with:  pip install -r requirements.txt   (Python 3.12)
+
+# --- core: needed to RUN the student notebook ---------------------------------
+scanpy==1.12.1
+anndata==0.12.17
+numpy==2.1.1
+pandas==2.3.3
+scipy==1.14.1
+matplotlib==3.11.0
+seaborn==0.13.2
+h5py==3.16.0
+
+# --- Jupyter: needed to open / execute the notebook ---------------------------
+nbformat==5.10.4       # also used by notebooks/_build_notebook.py
+nbconvert==7.17.1      # to execute the notebook headlessly
+ipykernel==7.2.0
+
+# --- mapping engine: needed ONLY to (re)run processing/01-03 ------------------
+# The student notebook just loads the pre-computed results in /results, so it does
+# NOT need this. The processing scripts install it themselves; pinned here for
+# completeness. It is the engine behind MapMyCells.
+cell_type_mapper==1.7.2
+# cell_type_mapper @ git+https://github.com/AllenInstitute/cell_type_mapper
+
+# --- optional: §8/spatial CCF region boundaries (not used by the core notebook)
+# SimpleITK
+# scikit-image
+# abc_atlas_access @ git+https://github.com/alleninstitute/abc_atlas_access.git

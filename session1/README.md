@@ -4,6 +4,19 @@ Materials for the first interactive session (50 min): single-nucleus spinal-cord
 QC, clustering, and visualization, plus an intro to **cellxgene** and the **ABC
 whole-brain atlas**.
 
+## Setup
+Install the pinned Python environment (Python 3.12):
+```bash
+pip install -r requirements.txt
+```
+The student notebook only needs the "core" + "Jupyter" packages; `torch` /
+`scvi-tools` (bottom of `requirements.txt`) are required **only** to re-run the
+GPU rebuild script `01b`. To run the seminar on a new machine you need the repo
+plus the two input objects in `/results/` (`SpC_workshop_snRNA.h5ad`,
+`SpC_workshop_spatial_example.h5ad`); the notebook regenerates everything else.
+Keep **~16 GB free on the `/results` volume** — the notebook writes a ~6 GB
+processed object plus a ~3 GB cellxgene copy (and a same-volume temp copy).
+
 ## Layout
 ```
 session1/

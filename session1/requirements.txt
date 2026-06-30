@@ -1,0 +1,34 @@
+# Session 1 — Spinal cord snRNA QC, clustering & visualization
+# Pinned to the versions used to build and validate the workshop notebook.
+# Install with:  pip install -r requirements.txt
+# (Python 3.12 was used. A CPU-only machine can skip the "rebuild only" section.)
+
+# --- core: needed to RUN the student notebook ---------------------------------
+scanpy==1.12.1
+anndata==0.12.17
+numpy==2.1.1
+pandas==2.3.3
+scipy==1.17.1
+matplotlib==3.11.0
+h5py==3.16.0            # used by make_safe_h5ad.py
+scikit-learn==1.9.0    # PCA / neighbors
+numba==0.61.2          # scanpy acceleration
+leidenalg==0.12.0      # sc.tl.leiden(flavor='igraph')
+igraph==1.0.0          # sc.tl.leiden(flavor='igraph')
+
+# Allen Institute single-cell QC toolkit (class-specific QC step)
+# source: https://github.com/AllenInstitute/sciduck
+sciduck==0.5.5
+
+# --- Jupyter: needed to open / execute the notebook ---------------------------
+ipython==9.14.1
+ipykernel==7.2.0
+jupyter-client==8.8.0
+nbformat==5.10.4       # also used by notebooks/_build_notebook.py
+nbconvert==7.17.1      # to execute the notebook headlessly
+
+# --- rebuild only: regenerating the workshop h5ads from scratch ---------------
+# Required ONLY by processing/01b_scvi_umap_prefilter.py (trains scVI, needs a GPU).
+# Not needed to run the student notebook, which uses the precomputed X_scVI embedding.
+torch==2.4.0
+scvi-tools==1.4.3
