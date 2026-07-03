@@ -63,9 +63,24 @@ session2/
 │   ├── 07_build_supertype_reciprocal_artifacts.py  # overlap-coefficient reciprocity tables
 │   └── mapping_io.py                    # reciprocal-mapping helpers (from the tutorial, extended)
 └── notebooks/
-    ├── _build_notebook.py               # regenerates the .ipynb (markdown before every cell)
-    └── session2_reciprocal_mapping_spatial.ipynb   # student-facing notebook
+    ├── _build_notebook.py               # regenerates the reciprocal-mapping .ipynb
+    ├── _build_webportal_notebook.py     # regenerates the MapMyCells web-portal .ipynb
+    ├── _build_literature_notebook.py    # regenerates the literature cell-type .ipynb
+    ├── session2_literature_cell_types.ipynb        # Part 2A: find textbook cell types (run first)
+    ├── session2_webportal_mapping_spatial.ipynb    # Part 2B: map to mouse brain (MapMyCells portal)
+    └── session2_reciprocal_mapping_spatial.ipynb   # Part 2B: map to mouse brain (reciprocal, local)
 ```
+
+### Notebook order
+`session2_literature_cell_types.ipynb` comes **first**: the descriptive `Group_V2`
+names are hidden behind anonymous **`Group` IDs** (`Subclass_V2` + a number, e.g.
+`Glut-D 6`), and students work out which anonymous group is which classic spinal-cord
+cell type (dorsal-horn `TAC3`/`NMU` itch neurons, `PHOX2A`/`RELN`/`LMX1B` ascending
+nociceptive projection neurons, and `CHRNA5` Renshaw cells). They rank the anonymous
+groups on marker combinations, view the markers on the snRNA UMAP and in dotplots, and
+`explore_group()` any ID on the UMAP **and** in the example spatial sections at once;
+the real name is uncovered only in each target's reveal. Only then do they map the
+*whole* taxonomy onto the mouse whole brain with the web-portal (or reciprocal) notebook.
 
 ## Workshop data (in `/results/`, built by the processing scripts)
 
@@ -84,11 +99,14 @@ session2/
 
 The MERFISH spatial atlas and the two mapping references are read in place from
 `/data/mouse_wb_spatial_tutorial/` and `/scratch/SpC_consensus_ref/` (see
-`00_config.py`).
+`00_config.py`). To (re)download the ABC MERFISH atlas from scratch, run
+`00_download_spatial_atlas.py` (see the repo-root [`README.md`](../README.md) for
+full ABC Atlas download instructions and links).
 
 ### Rebuild
 ```bash
 cd processing
+python 00_download_spatial_atlas.py   # (re)download the ABC MERFISH atlas (only if not already bundled)
 bash   01_map_spc_to_wb_subclass.sh   # forward mapping  (~1 min, CPU)
 bash   02_build_spc_reference.sh      # SpC consensus reference (reuses the prebuilt copy if present)
 python 03_map_wb_to_spc.py            # reverse mapping  (~1 min, CPU)
