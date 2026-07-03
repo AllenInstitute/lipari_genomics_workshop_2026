@@ -7,10 +7,10 @@
 # can map the mouse whole-brain subclasses ONTO our spinal cord (the reverse half
 # of the reciprocal mapping, run by 03_map_wb_to_spc.py).
 #
-# A pre-built copy already lives at $REF_PATH (/scratch/SpC_consensus_ref); this
-# script SKIPS the heavy build if it is present, and otherwise rebuilds it from
-# the source taxonomy h5ad. Mirrors the reference-build block in the tutorial's
-# scripts/1_run_mapping.sh.
+# A pre-built copy previously lived on /scratch; this script SKIPS the heavy build
+# if $REF_PATH is present, and otherwise rebuilds it from the source taxonomy
+# h5ad into /results (writable). Mirrors the reference-build block in the
+# tutorial's scripts/1_run_mapping.sh.
 #
 # Run::  bash 02_build_spc_reference.sh
 # =============================================================================
@@ -18,7 +18,7 @@ set -euo pipefail
 
 pip install --quiet 'cell_type_mapper@git+https://github.com/AllenInstitute/cell_type_mapper'
 
-REF_PATH="${REF_PATH:-/scratch/SpC_consensus_ref}"
+REF_PATH="${REF_PATH:-/results/SpC_consensus_ref}"
 REF_H5AD="${REF_H5AD:-/data/SpinalCord/manuscript/RNA/AIBS_SpC_consensus_taxonomy_harmonized_AIT-pre-print.h5ad}"
 # Coarse -> fine taxonomy hierarchy of the consensus spinal-cord atlas.
 HIERARCHY='["Class","Subclass","Group","consensus_cluster"]'

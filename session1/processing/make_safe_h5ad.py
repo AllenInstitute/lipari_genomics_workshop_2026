@@ -10,8 +10,8 @@ coerces an object into that shape and writes a cleaned copy.
 Usage:
     python make_safe_h5ad.py input.h5ad output.h5ad [--max-categories N]
 
-Recommend copying the input to scratch first (the /uns prune step opens the input
-file in r+ mode and mutates it in place).
+Recommend copying the input to a writable location (e.g. /results) first (the /uns
+prune step opens the input file in r+ mode and mutates it in place).
 """
 
 import argparse

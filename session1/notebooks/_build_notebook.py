@@ -38,7 +38,11 @@ QC section is to find them.""")
 md("""## 0. Setup
 
 Import libraries and **fix all random seeds** (python, numpy, scanpy) so the
-clustering and UMAP below are byte-for-byte reproducible across machines.""")
+clustering and UMAP below are byte-for-byte reproducible across machines.
+
+The pre-built workshop artifacts are distributed **read-only** in
+`DATA_DIR` (`/data/lipari_workshop`); anything you save goes to the writable
+`RESULTS_DIR` (`/results`).""")
 code("""import os, random
 import warnings
 import numpy as np
@@ -47,6 +51,12 @@ import scanpy as sc
 import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
+
+# ── Workshop paths ────────────────────────────────────────────────────────────
+# Pre-built inputs are read-only under DATA_DIR; write everything to RESULTS_DIR.
+DATA_DIR = '/data/lipari_workshop'
+RESULTS_DIR = '/results'
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 SEED = 0
 os.environ['PYTHONHASHSEED'] = str(SEED)
@@ -68,7 +78,7 @@ cover **every** nucleus:
   low-quality nuclei sit* before we remove them.
 - `X_scVI_atlas` / `X_umap_atlas` - the published full-atlas embeddings (carried
   for comparison).""")
-code("""adata = sc.read_h5ad('/results/SpC_workshop_snRNA.h5ad')
+code("""adata = sc.read_h5ad(f'{DATA_DIR}/SpC_workshop_snRNA.h5ad')
 adata""")
 
 md("""Look at the cell metadata (`obs`). Key columns:
@@ -600,10 +610,12 @@ print(pd.crosstab(qc_compare['your_qc'], qc_compare['atlas_qc']))""")
 # ---- 9. Export for cellxgene --------------------------------------------------
 md("""## 9. Export for cellxgene
 
-Write the processed object to `/results/` so it can be opened in **cellxgene** for
-interactive exploration. (Your instructor will provide the cellxgene capsule link.)""")
-code("""adata.write('/results/SpC_workshop_snRNA_session1_processed.h5ad')
-print('Saved /results/SpC_workshop_snRNA_session1_processed.h5ad')""")
+Write the processed object to `RESULTS_DIR` (`/results/`) so it can be opened in
+**cellxgene** for interactive exploration. (Your instructor will provide the
+cellxgene capsule link.)""")
+code("""out_processed = f'{RESULTS_DIR}/SpC_workshop_snRNA_session1_processed.h5ad'
+adata.write(out_processed)
+print('Saved', out_processed)""")
 
 md("""### Make a cellxgene-safe copy
 
@@ -615,8 +627,8 @@ We run it here on a throwaway copy of the object we just wrote (the script prune
 cleaned result to `/results/`.""")
 code("""import shutil, subprocess, sys, os
 
-src    = '/results/SpC_workshop_snRNA_session1_processed.h5ad'
-safe   = '/results/SpC_workshop_snRNA_session1_cellxgene.h5ad'
+src    = f'{RESULTS_DIR}/SpC_workshop_snRNA_session1_processed.h5ad'
+safe   = f'{RESULTS_DIR}/SpC_workshop_snRNA_session1_cellxgene.h5ad'
 script = '../processing/make_safe_h5ad.py'
 
 # work on a throwaway copy on the same volume as the output (the script prunes
@@ -632,7 +644,7 @@ md("""## 10. A glimpse of spatial transcriptomics
 
 snRNA-seq tells us **what** cell types exist, but not **where** they sit. Spatial
 methods profile transcripts while preserving tissue coordinates. The workshop ships
-a small spatial example (`/results/SpC_workshop_spatial_example.h5ad`) holding the
+a small spatial example (`SpC_workshop_spatial_example.h5ad`) holding the
 three **representative cross-species sections** (human, macaque, mouse) from the
 manuscript, each mapped onto the same `Group_V2` taxonomy and colours.
 
@@ -648,7 +660,7 @@ import matplotlib.font_manager as fm
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
 # ── Load the 3-species spatial example + its companion artifacts ──────────────
-spatial = sc.read_h5ad('/results/SpC_workshop_spatial_example.h5ad')
+spatial = sc.read_h5ad(f'{DATA_DIR}/SpC_workshop_spatial_example.h5ad')
 spatial_obs = spatial.obs
 
 # The plot uses the transformed coordinates in obs['_plot_x'/'_plot_y']. If you
@@ -660,7 +672,7 @@ if not {'_plot_x', '_plot_y'}.issubset(spatial_obs.columns):
     if _coords is None:
         raise KeyError(
             "No '_plot_x'/'_plot_y' in obs and no 'spatial' coordinates in obsm - "
-            "regenerate /results/SpC_workshop_spatial_example.h5ad by running "
+            "regenerate SpC_workshop_spatial_example.h5ad by running "
             "processing/02_build_spatial_example.py")
     spatial_obs = spatial_obs.copy()
     spatial_obs['_plot_x'] = np.asarray(_coords)[:, 0].astype(float)
@@ -669,10 +681,10 @@ if spatial_obs['species'].nunique() < 3:
     print('WARNING: spatial object has <3 species - it looks stale. Re-run '
           'processing/02_build_spatial_example.py for the full cross-species panel.')
 
-nn_obs = pd.read_csv('/results/SpC_workshop_spatial_nn_overlay.tsv.gz',
+nn_obs = pd.read_csv(f'{DATA_DIR}/SpC_workshop_spatial_nn_overlay.tsv.gz',
                      sep='\\t', index_col=0, compression='gzip')
 
-with open('/results/SpC_workshop_spatial_meta.json') as f:
+with open(f'{DATA_DIR}/SpC_workshop_spatial_meta.json') as f:
     _meta = json.load(f)
 rep_example_sections = _meta['representative_sections']     # species -> section id
 rep_crop    = {k: tuple(v) for k, v in _meta['rep_crop'].items()}
@@ -756,7 +768,7 @@ md("""## 11. Explore the data interactively
 
 **cellxgene** - the cellxgene-safe object you just saved
 (`SpC_workshop_snRNA_session1_cellxgene.h5ad`) and the spatial example
-(`/results/SpC_workshop_spatial_example.h5ad`) can be browsed interactively:
+(`SpC_workshop_spatial_example.h5ad`) can be browsed interactively:
 colour by gene, by `Group_V2`, lasso-select populations.
 
 **Allen Brain Cell (ABC) Atlas** - explore the whole-brain reference we will map

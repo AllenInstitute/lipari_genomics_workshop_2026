@@ -45,9 +45,10 @@ AIT21 (≤150 seeded cells/supertype) into a small, **student‑shippable**
 pip install -r requirements.txt          # Python 3.12
 jupyter lab notebooks/session2_reciprocal_mapping_spatial.ipynb
 ```
-The student notebook only **loads** the pre‑computed results in `/results/`
-(below) plus the bundled MERFISH atlas — it does not run any mapping live, so
-`cell_type_mapper` is needed only to rebuild the artifacts.
+The student notebook only **loads** the pre‑computed results shipped read‑only in
+`/data/lipari_workshop/` (below) plus the bundled MERFISH atlas, and writes any
+outputs to `/results/` — it does not run any mapping live, so `cell_type_mapper`
+is needed only to rebuild the artifacts.
 
 ## Layout
 ```
@@ -82,7 +83,11 @@ groups on marker combinations, view the markers on the snRNA UMAP and in dotplot
 the real name is uncovered only in each target's reveal. Only then do they map the
 *whole* taxonomy onto the mouse whole brain with the web-portal (or reciprocal) notebook.
 
-## Workshop data (in `/results/`, built by the processing scripts)
+## Workshop data (read‑only in `/data/lipari_workshop/`, built by the processing scripts)
+
+The processing scripts write to `/results/`; the built artifacts are distributed
+to students **read‑only under `/data/lipari_workshop/`**, which is where the
+notebooks read them from.
 
 | File | What it is |
 |------|------------|
@@ -97,9 +102,10 @@ the real name is uncovered only in each target's reveal. Only then do they map t
 | `wb_supertype_means.h5ad` | 1201 mouse‑WB supertype mean profiles (subsampled) — the supertype reverse query. |
 | `wb_subsampled_ABC.h5ad` | Student‑sized mouse‑WB snRNA (≤150 cells/supertype, RAW counts) — the shippable stand‑in for the 224 GB atlas. |
 
-The MERFISH spatial atlas and the two mapping references are read in place from
-`/data/mouse_wb_spatial_tutorial/` and `/scratch/SpC_consensus_ref/` (see
-`00_config.py`). To (re)download the ABC MERFISH atlas from scratch, run
+The MERFISH spatial atlas is read in place from the external
+`/data/mouse_wb_spatial_tutorial/` tutorial bundle; the reverse mapping
+reference is (re)built into `/results/SpC_V2_ref/` (see `00_config.py`). To
+(re)download the ABC MERFISH atlas from scratch, run
 `00_download_spatial_atlas.py` (see the repo-root [`README.md`](../README.md) for
 full ABC Atlas download instructions and links).
 

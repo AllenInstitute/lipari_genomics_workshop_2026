@@ -74,11 +74,14 @@ md("""## 0. Setup
 
 Import libraries, **fix all random seeds**, and load the two datasets:
 
-- the Session-1 **snRNA** object (`/results/SpC_workshop_snRNA.h5ad`) - raw counts,
+- the Session-1 **snRNA** object (`SpC_workshop_snRNA.h5ad`) - raw counts,
   which we normalise/log exactly as in Session 1, plus the carried atlas **UMAP**, and
-- the **example spatial** object (`/results/SpC_workshop_spatial_example.h5ad`) -
+- the **example spatial** object (`SpC_workshop_spatial_example.h5ad`) -
   three representative cross-species sections (human, macaque, mouse), each nucleus
-  carrying its cell-type label, its Rexed lamina, and a 947-gene spatial panel.""")
+  carrying its cell-type label, its Rexed lamina, and a 947-gene spatial panel.
+
+The pre-built workshop artifacts are distributed **read-only** in `DATA_DIR`
+(`/data/lipari_workshop`).""")
 code("""import os, json, random, warnings
 import numpy as np
 import pandas as pd
@@ -97,10 +100,11 @@ sc.settings.seed = SEED
 sc.settings.verbosity = 1
 sc.settings.set_figure_params(dpi=90, frameon=False, figsize=(6, 6))
 
-SNRNA_H5AD   = '/results/SpC_workshop_snRNA.h5ad'
-SPATIAL_H5AD = '/results/SpC_workshop_spatial_example.h5ad'
-SPATIAL_NN   = '/results/SpC_workshop_spatial_nn_overlay.tsv.gz'
-SPATIAL_META = '/results/SpC_workshop_spatial_meta.json'
+DATA_DIR     = '/data/lipari_workshop'   # read-only pre-built workshop artifacts
+SNRNA_H5AD   = f'{DATA_DIR}/SpC_workshop_snRNA.h5ad'
+SPATIAL_H5AD = f'{DATA_DIR}/SpC_workshop_spatial_example.h5ad'
+SPATIAL_NN   = f'{DATA_DIR}/SpC_workshop_spatial_nn_overlay.tsv.gz'
+SPATIAL_META = f'{DATA_DIR}/SpC_workshop_spatial_meta.json'
 UMAP_BASIS   = 'X_umap_atlas'      # carried atlas UMAP embedding
 SECRET       = 'Group_V2'          # the descriptive name we are HIDING
 GROUPBY      = 'Group'             # the anonymous ID students work with

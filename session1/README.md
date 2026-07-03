@@ -12,10 +12,11 @@ pip install -r requirements.txt
 The student notebook only needs the "core" + "Jupyter" packages; `torch` /
 `scvi-tools` (bottom of `requirements.txt`) are required **only** to re-run the
 GPU rebuild script `01b`. To run the seminar on a new machine you need the repo
-plus the input objects in `/results/` (`SpC_workshop_snRNA.h5ad`,
-`SpC_workshop_spatial_example.h5ad` and its two spatial companions
-`SpC_workshop_spatial_nn_overlay.tsv.gz` / `SpC_workshop_spatial_meta.json`);
-the notebook regenerates everything else.
+plus the read-only workshop objects distributed in `/data/lipari_workshop/`
+(`SpC_workshop_snRNA.h5ad`, `SpC_workshop_spatial_example.h5ad` and its two
+spatial companions `SpC_workshop_spatial_nn_overlay.tsv.gz` /
+`SpC_workshop_spatial_meta.json`); the notebook reads those and **writes
+everything it produces to `/results/`**.
 Keep **~16 GB free on the `/results` volume** — the notebook writes a ~6 GB
 processed object plus a ~3 GB cellxgene copy (and a same-volume temp copy).
 
@@ -36,7 +37,9 @@ session1/
 ```
 
 ## Workshop data
-Built by the processing scripts and written to `/results/` (where cellxgene reads):
+Built once by the processing scripts (they write to `/results/`) and distributed
+to students **read-only under `/data/lipari_workshop/`**, which is where the
+notebook reads them from (writing any outputs back to `/results/`):
 
 | File | What it is |
 |------|------------|
@@ -62,10 +65,10 @@ scVI training dies with `CUBLAS_STATUS_NOT_INITIALIZED`.
 `obs`/`var` only (NaNs dropped or stringified), bounded category counts, float32 `X`,
 no stray `raw`/`obsm`/`varm` DataFrames, and only `*_colors` palettes aligned to their
 categorical column kept in `uns`. The `/uns` prune step opens the input **in place**,
-so copy to scratch first:
+so copy to a writable location (e.g. `/results`) first:
 ```bash
-cp /results/SpC_workshop_snRNA.h5ad /scratch/in.h5ad
-python make_safe_h5ad.py /scratch/in.h5ad /scratch/SpC_workshop_snRNA_cellxgene.h5ad
+cp /data/lipari_workshop/SpC_workshop_snRNA.h5ad /results/in.h5ad
+python make_safe_h5ad.py /results/in.h5ad /results/SpC_workshop_snRNA_cellxgene.h5ad
 ```
 
 ## Reproducibility
