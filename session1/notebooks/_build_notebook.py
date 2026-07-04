@@ -27,8 +27,9 @@ spinal-cord single-nucleus RNA-seq atlas.
 1. Inspect the dataset and compute **quality-control (QC)** metrics.
 2. See **why we integrate across species** (naive PCA vs. scVI).
 3. **Filter** low-quality nuclei using thresholds *you* choose.
-4. **Normalize**, reduce dimensionality, **cluster** (Leiden), and embed (UMAP).
-5. Compare your clusters to the reference **Group_V2 / Subclass_V2** cell-type labels.
+4. **Normalize** and view the pre-computed integrated **UMAP** of the nuclei you kept.
+5. Recompute the integration and view the **final clustering** (Allen
+   `transcriptomic_clustering`) alongside the reference **Group_V2 / Subclass_V2** labels.
 
 **Bonus section** (self-guided, likely *not* covered in class): marker genes,
 comparing your filtering to the reference, exporting for **cellxgene**, a spatial
@@ -39,7 +40,7 @@ transcriptomics teaser, and links to the interactive atlases.
 **How this runs:** we will walk through sections 0-2 together, then you get some
 **free time in section 3** to tune the QC thresholds yourself and try to match the
 atlas (the precision/recall readout is your score to beat). We regroup for the
-**reveal** and finish sections 4-6 on *your* filtered data. The Bonus section is
+**reveal** and finish sections 4-7 on *your* filtered data. The Bonus section is
 yours to explore afterwards.
 
 The data: ~100 nuclei per cell-type Group per species that *passed* QC, plus a
@@ -96,7 +97,7 @@ md("""Look at the cell metadata (`obs`). Key columns:
   *including* the ones that failed QC. Because it exists for all cells (unlike
   `Class_V2`), we use it - and only it - to apply **different QC thresholds to
   different cell classes** in the next section.
-- precomputed QC metrics: `doublet_score`, `solo_doublet` (doublet probabilities),
+- precomputed QC metrics: `solo_doublet` (SOLO doublet probability),
   `percent_ribo`, `log.gene.counts.0` (= log10 of genes detected).
 - `species` - the donor species.
 
@@ -225,7 +226,7 @@ sc.pl.embedding(adata, basis='X_umap_prefilter', color='species', ax=axes[1],
 plt.tight_layout(); plt.show()""")
 
 # ---- 1d. Cluster the integrated latent ----------------------------------------
-md("""### Cluster the integrated latent now (we will reuse these clusters)
+md("""### Cluster the integrated latent now
 
 Because the scVI latent mixes the species sensibly, we can **cluster on it right
 away** - on *all* nuclei, *before* any QC filtering. We build a k-nearest-neighbour
@@ -257,16 +258,15 @@ like the SOLO doublet probabilities, needs a GPU and several minutes, so they we
 precomputed upstream):
 - **`log.gene.counts.0`** - log10 of the number of genes detected per nucleus.
 - **`percent_ribo`** - fraction of counts from ribosomal genes.
-- **`doublet_score`** and **`solo_doublet`** - two complementary doublet scores.
+- **`solo_doublet`** - the SOLO doublet probability (a deep-learning doublet score).
 
 We recompute the two cheap ones (`percent_ribo`, `log.gene.counts.0`) from the raw
-counts so you can see exactly how they are defined, then summarize all four.""")
+counts so you can see exactly how they are defined, then summarize all three.""")
 code("""ribo_genes = adata.var_names.str.startswith(('RPS', 'RPL'))
 adata.obs['percent_ribo'] = (np.asarray(adata[:, ribo_genes].X.sum(1)).ravel() /
                              np.asarray(adata.X.sum(1)).ravel())
 adata.obs['log.gene.counts.0'] = np.log10(np.asarray((adata.X > 0).sum(1)).ravel() + 1)
-adata.obs[['log.gene.counts.0', 'percent_ribo', 'doublet_score',
-           'solo_doublet']].describe().round(3)""")
+adata.obs[['log.gene.counts.0', 'percent_ribo', 'solo_doublet']].describe().round(3)""")
 
 md("""### Different cell classes have different "good" ranges
 
@@ -278,13 +278,13 @@ therefore set **class-specific** gene-count bounds.""")
 code("""sc.pl.violin(adata, 'log.gene.counts.0', groupby='class_coarse',
              stripplot=False, rotation=30)""")
 
-md("""Now look at the distributions of the doublet scores and ribosomal fraction.
+md("""Now look at the distributions of the SOLO doublet score and ribosomal fraction.
 High doublet scores and very high ribosomal fractions are classic signs of
 low-quality nuclei - keep an eye on the right-hand tails. *(We deliberately do not
 show the atlas's keep/drop answer yet - you will pick your own thresholds first.)*""")
 code("""def qc_histograms(df):
-    metrics = ['doublet_score', 'solo_doublet', 'percent_ribo']
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    metrics = ['solo_doublet', 'percent_ribo']
+    fig, axes = plt.subplots(1, len(metrics), figsize=(10, 4))
     for ax, m in zip(axes, metrics):
         ax.hist(df[m], bins=60, color='#4c72b0')
         ax.set_xlabel(m); ax.set_ylabel('nuclei')
@@ -296,15 +296,15 @@ md("""### Where might the low-quality nuclei sit on the UMAP?
 
 Colour the **pre-filter UMAP** (`X_umap_prefilter`, computed on *all* nuclei) by
 coarse cell class (`class_coarse`, defined for every nucleus), the per-nucleus
-**doublet score**, and the **log10 number of UMIs** (`log_umi_counts`, sequencing
+**SOLO doublet score**, and the **log10 number of UMIs** (`log_umi_counts`, sequencing
 depth). Watch for small fringe islands and regions where the doublet score lights
 up or the UMI depth drops - those are candidate low-quality territories. After you
 set your own thresholds you will be cutting regions like these, and *then* we reveal
 the atlas's decision.""")
 code("""with plt.rc_context({'figure.figsize': (7, 7)}):
     sc.pl.embedding(adata, basis='X_umap_prefilter',
-                    color=['class_coarse', 'doublet_score', 'log_umi_counts'],
-                    title=['coarse cell class', 'doublet score', 'log10 UMIs'],
+                    color=['class_coarse', 'solo_doublet', 'log_umi_counts'],
+                    title=['coarse cell class', 'SOLO doublet score', 'log10 UMIs'],
                     size=8, cmap='viridis', ncols=3, wspace=0.3)""")
 
 md("""### Normalize & log-transform before viewing gene expression
@@ -362,7 +362,16 @@ with plt.rc_context({'figure.figsize': (5, 5)}):
 # Doublet-suspect nuclei carry higher SOLO doublet scores on average.
 _lab = adata.obs['n_lineage_markers'].clip(upper=2).map(
     {0: '0 markers', 1: '1 marker', 2: '>=2 (doublet-suspect)'})
-print(adata.obs.groupby(_lab, observed=True)['doublet_score'].mean())""")
+print(adata.obs.groupby(_lab, observed=True)['solo_doublet'].mean())""")
+
+md("""**But this simple co-occurrence test is not enough.** Counting mutually-exclusive
+markers only flags the most obvious inter-lineage doublets, and it fails whenever two
+*similar* cell types (say two neuronal subtypes) collide, or when dropout hides one
+partner's markers. That is exactly why we lean on more sophisticated methods like
+**SOLO**: it *simulates* artificial doublets by adding together pairs of real nuclei,
+then trains a **deep-learning probabilistic model** to tell those simulated doublets
+apart from singlets. The resulting per-nucleus `solo_doublet` probability is the score
+we actually filter on below - far more sensitive than the marker-overlap heuristic.""")
 md("""## 3. Class-specific QC with `sciduck`
 
 We reproduce the atlas QC strategy with **`sciduck`**, which lets us register a set
@@ -398,7 +407,8 @@ thresholds below yourself. **These presets start wide open - they keep essential
 every nucleus, including the bad ones.** Your job is to *tighten* them. `GENE_BOUNDS`
 gives the allowed `log.gene.counts.0` **(low, high)** range **per cell class**
 (non-neurons typically need fewer genes than neurons, and motor neurons the most).
-The doublet/ribo cut-offs are global. Edit the numbers, re-run this cell and the
+The doublet/ribo cut-offs are global (the doublet filter uses the SOLO score). Edit
+the numbers, re-run this cell and the
 diagnostics below - your **score** (precision/recall vs the atlas) will be revealed
 at the end. *Don't scroll to the reveal yet* - we will look at the atlas's actual
 answer together once everyone has had a go.""")
@@ -411,11 +421,9 @@ GENE_BOUNDS = {
     'neurons':       (0.0, 5.0),   # GABAergic / Glutamatergic / Cholinergic
     'Motor Neurons': (0.0, 5.0),   # motor neurons
 }
-MAX_DOUBLET_SCORE = 1.0   # drop nuclei above this doublet score (1.0 = keep all)
 MAX_SOLO_DOUBLET  = 1.0   # drop nuclei above this SOLO doublet probability
 MAX_RIBO          = 1.0   # drop nuclei above this ribosomal fraction
-# group-level (per atlas cluster) doublet limits - also wide open to start
-MAX_GROUP_DOUBLET = 1.0   # drop whole clusters whose MEAN doublet score exceeds this
+# group-level (per atlas cluster) doublet limit - also wide open to start
 MAX_GROUP_SOLO    = 1.0   # drop whole clusters whose MEAN SOLO doublet exceeds this""")
 
 md("""Preview the per-class gene-count bounds before applying them: each panel shows
@@ -454,7 +462,6 @@ neuron_classes = [c for c in classes if c not in ('Non-Neurons', 'Motor Neurons'
 
 # global doublet / ribosomal limits
 sd.basic_qc.add_range_constraint(adata, 'percent_ribo', lt=MAX_RIBO)
-sd.basic_qc.add_range_constraint(adata, 'doublet_score', lt=MAX_DOUBLET_SCORE)
 sd.basic_qc.add_range_constraint(adata, 'solo_doublet', lt=MAX_SOLO_DOUBLET)
 
 # class-specific gene-count ranges
@@ -469,7 +476,6 @@ sd.basic_qc.add_range_constraint(adata, 'log.gene.counts.0',
     subset='class_coarse', subset_values=neuron_classes)
 
 # group-level: drop whole Leiden clusters whose mean doublet signal is high
-sd.basic_qc.add_group_level_constraint(adata, 'doublet_score', groupby='leiden', lt=MAX_GROUP_DOUBLET)
 sd.basic_qc.add_group_level_constraint(adata, 'solo_doublet', groupby='leiden', lt=MAX_GROUP_SOLO)
 
 sd.basic_qc.apply_constraints(adata)
@@ -500,8 +506,6 @@ _all_cls    = list(adata.obs['class_coarse'].cat.categories)
 _non_chol   = [c for c in _all_cls if c != 'Cholinergic']
 _neuron_cls = [c for c in _all_cls if c not in ('Non-Neurons', 'Motor Neurons')]
 sd.basic_qc.add_range_constraint(adata, 'percent_ribo', lt=0.2)
-sd.basic_qc.add_range_constraint(adata, 'doublet_score', lt=0.25,
-    subset='class_coarse', subset_values=_non_chol)
 sd.basic_qc.add_range_constraint(adata, 'solo_doublet', lt=0.55,
     subset='class_coarse', subset_values=_non_chol)
 sd.basic_qc.add_range_constraint(adata, 'log.gene.counts.0', gt=2.7, lt=3.7,
@@ -510,7 +514,6 @@ sd.basic_qc.add_range_constraint(adata, 'log.gene.counts.0', gt=2.8, lt=3.8,
     subset='class_coarse', subset_values=_neuron_cls)
 sd.basic_qc.add_range_constraint(adata, 'log.gene.counts.0', gt=2.9, lt=5.0,
     subset='class_coarse', subset_values=['Motor Neurons'])
-sd.basic_qc.add_group_level_constraint(adata, 'doublet_score', groupby='leiden', lt=0.2)
 sd.basic_qc.add_group_level_constraint(adata, 'solo_doublet',  groupby='leiden', lt=0.5)
 sd.basic_qc.apply_constraints(adata)
 adata.obs['atlas_sciduck_qc'] = adata.obs['keeper_cells'].map({True: 'passed_qc', False: 'filtered_out'})
@@ -527,7 +530,7 @@ print(f'Your score: precision {precision:.2f}, recall {recall:.2f}')
 print(pd.crosstab(keep.map({True: 'keep', False: 'remove'}), adata.obs['atlas_sciduck_qc']))""")
 
 md("""Now we re-draw **all** the QC histograms from above - gene counts, total UMIs,
-both doublet scores and the ribosomal fraction - split into the nuclei the atlas
+the SOLO doublet score and the ribosomal fraction - split into the nuclei the atlas
 **kept** (blue) vs **filtered out** (orange). Notice how the filtered nuclei pile up
 in the **low gene-count / low-UMI** and **high-doublet / high-ribo** tails. On the
 pre-filter UMAP the filtered-out nuclei form their own fringe territory rather than
@@ -536,7 +539,7 @@ above: how close did you get?""")
 code("""def qc_histograms_reveal(df):
     # the same metrics we plotted above (depth + doublet/ribo), now split by atlas decision
     metrics = ['log.gene.counts.0', 'log10_total_counts',
-               'doublet_score', 'solo_doublet', 'percent_ribo']
+               'solo_doublet', 'percent_ribo']
     ncols = 3
     nrows = int(np.ceil(len(metrics) / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
@@ -572,7 +575,6 @@ cross-species QC notebook
 | `log.gene.counts.0` | `[2.7, 3.7]` | Non-Neurons |
 | `log.gene.counts.0` | `[2.8, 3.8]` | neurons (GABAergic / Glutamatergic / Cholinergic) |
 | `log.gene.counts.0` | `[2.9, 5.0]` | Motor Neurons |
-| `doublet_score` | `< 0.25` | all classes **except Cholinergic** |
 | `solo_doublet` | `< 0.55` | all classes **except Cholinergic** |
 | `percent_ribo` | `< 0.2` | all nuclei |
 
@@ -580,8 +582,7 @@ cross-species QC notebook
 
 | metric | rule | effect |
 |---|---|---|
-| `doublet_score` | mean `< 0.2` per cluster | drop clusters that are doublet-dominated on average |
-| `solo_doublet` | mean `< 0.5` per cluster | same, using the SOLO score |
+| `solo_doublet` | mean `< 0.5` per cluster | drop clusters that are doublet-dominated on average |
 
 A few design choices worth noting:
 
@@ -589,9 +590,9 @@ A few design choices worth noting:
   droplets, while the *upper* bound (e.g. `3.7` for non-neurons) removes suspiciously
   gene-rich nuclei that are likely **doublets** - and motor neurons get a much higher
   ceiling (`5.0`) because they are genuinely large, transcript-rich cells.
-- **Cholinergic** nuclei are **exempt from the doublet filters**: cholinergic /
+- **Cholinergic** nuclei are **exempt from the SOLO doublet filter**: cholinergic /
   motor-neuron cells naturally carry very high counts and co-express broad programs,
-  so the doublet detectors flag them as false positives.
+  so the doublet detector flags them as false positives.
 - The **group-level** rules delete *entire* clusters (not just individual cells) that
   are collectively low-quality, which the per-cell metrics alone would miss.""")
 
@@ -626,82 +627,85 @@ md("""## 5. Dimensionality reduction & clustering
 
 We **already clustered the scVI latent near the top** of the notebook - that is
 where the `leiden` labels came from, and the QC group-level constraints used them to
-drop whole low-quality clusters. Now that we have kept only *your* good-quality
-nuclei, we recompute a clean **UMAP** on the scVI latent of the nuclei **you kept**
-(with a fixed `random_state` for reproducibility) and colour it by those same Leiden
-clusters. If you want a different granularity, lower the `resolution` in the
-clustering cell at the top and re-run from there.""")
-code("""sc.pp.neighbors(adata, use_rep='X_scVI', n_neighbors=15, random_state=SEED)
-sc.tl.umap(adata, random_state=SEED)
-print(adata.obs['leiden'].value_counts())""")
+drop whole low-quality clusters. We **do not recompute** the UMAP or Leiden here:
+instead we simply **reuse the pre-computed integrated UMAP** (`X_umap_prefilter`),
+now subset to the nuclei **you kept**. Recomputing on just this workshop subsample
+would give a slightly different embedding each time we change the QC thresholds; we
+want to keep looking at the **same** integrated map until we rebuild it on the full
+dataset (that is what section 7 does with the recomputed scVI).""")
+code("""print(adata.obs['leiden'].value_counts())""")
 
-md("""Plot the UMAP of your kept nuclei. First, colour it by your **Leiden clusters**
-on their own - with so many clusters at `resolution=15`, we use the high-contrast
-`godsnot_102` palette and hide the (very long) legend.""")
+md("""Plot the pre-computed UMAP of your kept nuclei. First, colour it by the
+**Leiden clusters** on their own - with so many clusters at `resolution=15`, we use
+the high-contrast `godsnot_102` palette and hide the (very long) legend.""")
 code("""with plt.rc_context({'figure.figsize': (8, 8)}):
-    sc.pl.umap(adata, color='leiden', palette=sc.pl.palettes.godsnot_102,
-               legend_loc=None, title='your Leiden clusters')""")
+    sc.pl.embedding(adata, basis='X_umap_prefilter', color='leiden',
+                    palette=sc.pl.palettes.godsnot_102,
+                    legend_loc=None, title='your Leiden clusters')""")
 
 md("""Now colour the same UMAP by **species** and by the reference `Class_V2` and
 `Subclass_V2` labels (these are blank/`NaN` for any nuclei without a reference
 annotation).""")
 code("""with plt.rc_context({'figure.figsize': (6, 6)}):
-    sc.pl.umap(adata, color=['species', 'Class_V2', 'Subclass_V2'],
-               wspace=0.4, ncols=2)""")
+    sc.pl.embedding(adata, basis='X_umap_prefilter',
+                    color=['species', 'Class_V2', 'Subclass_V2'],
+                    wspace=0.4, ncols=2)""")
 
-md("""### Recall: this is why we integrated
+md("""### Kept by QC, but removed from the analysis by hand
 
-Near the top of the notebook we saw that a **naive PCA** embedding splits each cell
-type **by species**, while the **scVI** latent we clustered on **mixes the
-species together**. That is exactly why we ran `sc.pp.neighbors(..., use_rep='X_scVI')`
-instead of clustering on PCA of the highly variable genes - the clusters
-reflect **cell identity**, not which species a nucleus came from.""")
+Metric-based QC is only the *first* pass. After the automated filters, the atlas team
+still **removed some nuclei by hand** during clustering and annotation - cells that
+survived every numeric threshold but did not form clean, reproducible cell types (for
+example residual doublets, ambient-RNA-dominated nuclei, or study-specific artifacts).
+These nuclei **pass the automated metric filters** (`atlas_sciduck_qc == 'passed_qc'`)
+yet carry **no reference cell-type label** (`Group_V2` is `NaN`), because they were
+dropped from the published taxonomy manually.
 
-# ---- 6. Cluster vs reference --------------------------------------------------
-md("""## 6. How well do your clusters match the reference cell types?
+First, colour the UMAP by **`study`** - the manual removals are often concentrated in a
+few studies. Then highlight, on the same map, the nuclei that **passed our metric
+filters but were dropped from the final analysis by hand**.""")
+code("""# Kept by the automated metric QC (atlas_sciduck_qc == passed_qc) but with NO final
+# reference label (Group_V2 is NaN) -> removed from the published analysis by hand
+# during clustering/annotation, not by any numeric threshold.
+metric_kept    = adata.obs['atlas_sciduck_qc'] == 'passed_qc'
+removed_by_hand = metric_kept & adata.obs['Group_V2'].isna()
+adata.obs['analysis_status'] = np.where(
+    removed_by_hand, 'removed by hand', 'in final analysis')
+adata.obs['analysis_status'] = adata.obs['analysis_status'].astype('category')
+print(f'{int(removed_by_hand.sum()):,} nuclei passed the metric filters but were '
+      f'removed from the final analysis by hand')
 
-Cross-tabulate your Leiden clusters against the reference taxonomy - first the
-coarse `Class_V2`, then the finer `Subclass_V2`. A good clustering shows each
-cluster dominated by a single reference class/subclass (each row summing to ~1
-after normalizing).""")
-code("""ct_class = pd.crosstab(adata.obs['leiden'], adata.obs['Class_V2'])
-ct_class.div(ct_class.sum(1), axis=0).round(2)""")
-code("""ct = pd.crosstab(adata.obs['leiden'], adata.obs['Subclass_V2'])
-ct.div(ct.sum(1), axis=0).round(2)""")
+with plt.rc_context({'figure.figsize': (7, 7)}):
+    # study across the map
+    sc.pl.embedding(adata, basis='X_umap_prefilter', color='study',
+                    size=8, title='study', palette=sc.pl.palettes.godsnot_102)
+    # highlight the metric-passed but hand-removed nuclei
+    sc.pl.embedding(adata, basis='X_umap_prefilter', color='analysis_status',
+                    size=8, groups=['removed by hand'], na_color='#dddddd',
+                    palette={'removed by hand': '#d62728',
+                             'in final analysis': '#dddddd'},
+                    title='passed QC, removed from analysis by hand')""")
 
-md("""### From cluster numbers to cell-type names
+md("""Which **coarse cell types** lost the most nuclei to manual curation? Rank
+`class_coarse` by how many metric-passed nuclei were removed from the final analysis by
+hand (with the share of that class removed). The classes at the top are the ones where
+metric QC alone was least sufficient and hand-curation did the most work.""")
+code("""hand = adata.obs.loc[removed_by_hand, 'class_coarse']
+metric_kept_cls = adata.obs.loc[metric_kept, 'class_coarse']
+ranking = pd.DataFrame({'removed_by_hand': hand.value_counts()})
+ranking['metric_kept_total'] = metric_kept_cls.value_counts()
+ranking['pct_removed'] = (100 * ranking['removed_by_hand']
+                          / ranking['metric_kept_total']).round(1)
+ranking = ranking.sort_values('removed_by_hand', ascending=False)
+ranking""")
 
-A Leiden cluster is just an **unlabelled group of similar nuclei** - `cluster 7`
-means nothing on its own. Turning it into something *interpretable* is a short chain
-of reasoning:
-
-1. **What genes are enriched here?** Rank each cluster's marker genes (Bonus section 7).
-2. **What do those genes mean?** Match them to *canonical* cell-type markers - e.g.
-   `GAD1`/`SLC6A5` → inhibitory (GABA/glycine), `SLC17A6` → excitatory (glutamate),
-   `CHAT` → cholinergic / motor neuron. **This step is where prior biological
-   knowledge - or a reference atlas - has to come in;** the data alone can only tell
-   you *which* genes differ, not what they signify.
-3. **Does an existing reference agree?** The cross-tab above is a shortcut for step 2:
-   a cluster that is, say, 95% one `Subclass_V2` can reasonably inherit that label.
-4. **What is its function and location?** Only now does the cluster become a *story* -
-   "a dorsal-horn inhibitory interneuron" - that connects to physiology (pain, touch,
-   movement) and, in Session 2, to **where in the tissue** it actually sits.
-
-The rest of this notebook is really steps 1-2; the atlas already did steps 3-4 for
-you and stored the answer in `Group_V2`, which is exactly why we can grade our own
-clusters against it.
-
-> **Your turn:** pick one Leiden cluster from the table above and note its dominant
-> `Subclass_V2`. In the **Bonus** marker-gene plots you can then check whether its
-> transmitter genes match what that label predicts.""")
-
-# ---- Post-QC scVI recompute ---------------------------------------------------
-md("""## 7. Recompute scVI on your filtered data
+# ---- 7. Final clustering on the recomputed scVI ------------------------------
+md("""## 7. Recompute scVI and get the final clustering
 
 The UMAP you have been looking at so far (`X_umap_prefilter`) was computed on
 **all** nuclei - including the low-quality ones you just removed. Now that you have
-a clean subset, it is worth rebuilding the integration and UMAP on just the nuclei
-you kept.
+a clean subset, it is worth rebuilding the integration on just the nuclei you kept
+and deriving the **final clustering** from it.
 
 The script `02b_build_session2_clean.py` does exactly that: it takes the
 atlas-filtered subsample, **retrains scVI** across species/study, and writes a
@@ -714,24 +718,32 @@ python /code/lipari_genomics_workshop_2026/session1/processing/02b_build_session
 
 A pre-built copy of this object is provided at
 `/data/lipari_workshop/SpC_workshop_snRNA_session2_clean.h5ad`, which we load
-below (if you re-run the script yourself it writes a fresh copy to `/results/`).""")
+below (if you re-run the script yourself it writes a fresh copy to `/results/`).
+
+**How the final clusters are defined.** We do *not* just pick a Leiden resolution by
+eye. On the recomputed scVI latent we run the Allen Institute's
+[`transcriptomic_clustering`](https://github.com/AllenInstitute/transcriptomic_clustering)
+package, which finds the *proper* clustering resolution automatically: it keeps
+**splitting clusters only while there are still differentially expressed genes
+between the resulting groups**, and stops once neighbouring clusters are no longer
+separable by DE genes. The clusters below (`Group_V2`) are the outcome of that
+data-driven procedure applied to the integrated latent - the atlas's **final
+clustering**, which we then compare to the reference `Subclass_V2` labels.""")
 code("""session2 = sc.read_h5ad('/data/lipari_workshop/SpC_workshop_snRNA_session2_clean.h5ad')
 print(f'{session2.n_obs:,} nuclei x {session2.n_vars:,} genes')
-session2.obs[['species', 'study', 'leiden', 'Subclass_V2']].head()""")
+print(f"{session2.obs['Group_V2'].nunique()} final clusters (Group_V2)")
+session2.obs[['species', 'study', 'Group_V2', 'Subclass_V2']].head()""")
 code("""with plt.rc_context({'figure.figsize': (7, 7)}):
+    # the final clustering (transcriptomic_clustering Group_V2) vs the reference subclass
     sc.pl.umap(session2,
-               color=['leiden', 'Subclass_V2'],
+               color=['Group_V2', 'Subclass_V2'],
                palette=sc.pl.palettes.godsnot_102,
-               ncols=2, wspace=0.35, legend_loc='on data',
-               legend_fontsize=6, size=8)
+               ncols=2, wspace=0.35, legend_loc=None, size=8)
     sc.pl.umap(session2,
                color=['species', 'study'],
                palette=sc.pl.palettes.godsnot_102,
                ncols=2, wspace=0.35,
-               legend_fontsize=6, size=8)
-               
-               
-               """)
+               legend_fontsize=6, size=8)""")
 
 # ---- BONUS divider ------------------------------------------------------------
 md("""---
@@ -802,30 +814,33 @@ code("""sc.pl.matrixplot(adata, NT_MARKERS, groupby='Class_V2',
 
 md("""Finally, let the **data** nominate **conserved** markers - genes that mark a
 cell type **in every species**, not just on average. For each reference
-`Supergroup_V2` cell type we rank genes (Wilcoxon) **separately within each
-species**, then score each gene by its **minimum** marker score across species: a
-gene only wins if it is strongly enriched in **human and macaque and mouse**.
-A species is **skipped** for a group when that group has **fewer than 20 cells**
-there (too few to rank reliably).""")
-code("""# Conserved markers: rank genes per species, then take the MIN score across
-# species so a gene only wins if it marks the cell type in *every* species.
+`Supergroup_V2` cell type we rank genes with **logistic regression** (a multinomial
+classifier - each gene's coefficient measures how much its expression predicts that
+cell type against all the others) **separately within each species**, then score each
+gene by its **minimum** marker score across species: a gene only wins if it is
+strongly enriched in **human and macaque and mouse**. A species is **skipped** for a
+group when that group has **fewer than 20 cells** there (too few to rank reliably).""")
+code("""# Conserved markers: rank genes per species with logistic regression, then take
+# the MIN coefficient across species so a gene only wins if it marks the cell type
+# in *every* species.
 GROUPBY = 'Supergroup_V2'
 MIN_CELLS_PER_SPECIES = 20   # skip a species for a group with fewer cells than this
 
 adata_lab = adata[adata.obs[GROUPBY].notna()].copy()
 adata_lab.obs[GROUPBY] = adata_lab.obs[GROUPBY].cat.remove_unused_categories()
 
-# Per-species marker scores (one Wilcoxon ranking within each species), restricted
-# to the groups that pass the cell-count threshold in that species.
+# Per-species marker scores (one logistic-regression ranking within each species),
+# restricted to the groups that pass the cell-count threshold in that species.
 species_scores = {}
 for sp in adata_lab.obs['species'].unique():
     a_sp = adata_lab[adata_lab.obs['species'] == sp].copy()
     a_sp.obs[GROUPBY] = a_sp.obs[GROUPBY].cat.remove_unused_categories()
     counts = a_sp.obs[GROUPBY].value_counts()
     valid = counts.index[counts >= MIN_CELLS_PER_SPECIES].tolist()
-    if len(valid) < 2:
-        continue  # need at least two groups to rank one against the rest
-    sc.tl.rank_genes_groups(a_sp, GROUPBY, groups=valid, method='wilcoxon')
+    if len(valid) < 3:
+        continue  # need >=3 groups for a multinomial logistic-regression ranking
+    sc.tl.rank_genes_groups(a_sp, GROUPBY, groups=valid, method='logreg',
+                            max_iter=1000)
     species_scores[sp] = sc.get.rank_genes_groups_df(a_sp, group=None)
 print(f'ranked markers within {len(species_scores)} species: {list(species_scores)}')
 
