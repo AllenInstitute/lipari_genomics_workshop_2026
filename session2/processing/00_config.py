@@ -26,15 +26,10 @@ import numpy as np
 # ── Global seed ────────────────────────────────────────────────────────────────
 SEED = 0
 
-# ── Workshop data dir (read-only, pre-built artifacts) ─────────────────────────
-# Everything the workshop ships (Session-1 objects, mapping results, means) lives
-# here read-only; writes go to RESULTS_DIR (/results) below.
-DATA_DIR = '/data/lipari_workshop'
-
 # ── Query (from Session 1) ─────────────────────────────────────────────────────
 # The multi-species SpC snRNA workshop object built by session1/processing.
 # Raw counts in .X, human-ortho gene symbols in var_names, V2 taxonomy in obs.
-QUERY_H5AD = os.path.join(DATA_DIR, 'SpC_workshop_snRNA.h5ad')
+QUERY_H5AD = '/results/SpC_workshop_snRNA.h5ad'
 # obs column carrying our spinal-cord cell-type label (used to summarise the
 # forward mapping per spinal type).
 QUERY_GROUP_KEY = 'Group_V2'
@@ -53,16 +48,15 @@ WB_CLASS_LEVEL = 'class_label'
 # ── REVERSE reference: OUR consensus spinal-cord taxonomy ───────────────────────
 # A NEW cell_type_mapper reference built from the AIBS consensus SpC taxonomy
 # (hierarchy Class→Subclass→Group→consensus_cluster). 02_build_spc_reference.sh
-# (re)builds it from the source h5ad into /results (writable); a pre-built copy
-# previously lived on /scratch.
+# (re)builds it from the source h5ad; a pre-built copy already lives on /scratch.
 # NOTE: its Group/Class *names* differ from the Session-1 V2 taxonomy (only
 # Subclass names line up), so it is kept for reference but the reverse arms now
-# map onto the V2 reference below instead. Rebuilt into /results (writable).
+# map onto the V2 reference below instead.
 SPC_CONSENSUS_H5AD = (
     '/data/SpinalCord/manuscript/RNA/'
     'AIBS_SpC_consensus_taxonomy_harmonized_AIT-pre-print.h5ad')
 SPC_CONSENSUS_HIERARCHY = ['Class', 'Subclass', 'Group', 'consensus_cluster']
-SPC_CONSENSUS_REF = '/results/SpC_consensus_ref'
+SPC_CONSENSUS_REF = '/scratch/SpC_consensus_ref'
 
 # ── V2 reverse reference: OUR HMBA Session-1 taxonomy (Class_V2→Subclass_V2→
 # Group_V2), built directly from the workshop query so the reverse arm speaks the
@@ -70,9 +64,8 @@ SPC_CONSENSUS_REF = '/results/SpC_consensus_ref'
 # Subclass↔Subclass_V2 (subclass arm) and Supertype↔Group_V2 (supertype arm);
 # the consensus taxonomy's Group names do NOT match Group_V2. Built by
 # 02b_build_spc_v2_reference.py, which writes the V2 labels into plain
-# Class/Subclass/Group columns (so the level names below stay valid). Built into
-# /results (writable) from the read-only workshop query.
-SPC_V2_REF = '/results/SpC_V2_ref'
+# Class/Subclass/Group columns (so the level names below stay valid).
+SPC_V2_REF = '/scratch/SpC_V2_ref'
 SPC_V2_SOURCE_H5AD = QUERY_H5AD
 SPC_V2_HIERARCHY = ['Class', 'Subclass', 'Group']
 # The reverse arms (03, 06) map mouse-WB means onto this reference.

@@ -107,12 +107,6 @@ np.random.seed(SEED)
 sc.settings.seed = SEED
 sc.settings.verbosity = 1
 
-# ── Workshop paths ────────────────────────────────────────────────────────────
-# Pre-built inputs are read-only under DATA_DIR; write everything to RESULTS_DIR.
-DATA_DIR = '/data/lipari_workshop'
-RESULTS_DIR = '/results'
-os.makedirs(RESULTS_DIR, exist_ok=True)
-
 # Mapping helpers live with the Session-2 processing scripts.
 PROC_DIR = '/code/lipari_genomics_workshop_2026/session2/processing'
 sys.path.insert(0, PROC_DIR)
@@ -124,8 +118,7 @@ import mapping_io as mio
 # (reference = "10x Whole Mouse Brain (CCN20230722)", algorithm = "Hierarchical"),
 # download the results .zip and set PORTAL_OUTPUT to it. The loader accepts the
 # .zip itself, the unzipped folder, or the HierarchicalMapping *.csv inside.
-# The bundled example below is the pre-computed run shipped under DATA_DIR.
-PORTAL_OUTPUT = (f'{DATA_DIR}/SpC_workshop_snRNA_session2_clean(1)_'
+PORTAL_OUTPUT = ('/data/lipari_workshop/SpC_workshop_snRNA_session2_clean(1)_'
                  '10xWholeMouseBrain(CCN20230722)_HierarchicalMapping_'
                  'UTC_1782861326789.zip')
 # ============================================================================
@@ -428,9 +421,9 @@ Everything from here on needs the workshop's spinal-cord dataset: your Session-1
 mapped cell's own `Subclass_V2` / `Group_V2` by cell id, and pull the canonical V2
 colour palettes so every reciprocal plot matches Session 1.""")
 code("""# Session-1 spinal-cord references — needed only for the reciprocal refinement.
-QUERY_H5AD             = f'{DATA_DIR}/SpC_workshop_snRNA.h5ad'
-REVERSE_JSON           = f'{DATA_DIR}/WB_SUBCLASS_to_SpC_MAPPING/hann_results.json'
-SUPERTYPE_REVERSE_JSON = f'{DATA_DIR}/WB_SUPERTYPE_to_SpC_MAPPING/hann_results.json'
+QUERY_H5AD             = '/data/lipari_workshop/SpC_workshop_snRNA.h5ad'
+REVERSE_JSON           = '/data/lipari_workshop/WB_SUBCLASS_to_SpC_MAPPING/hann_results.json'
+SUPERTYPE_REVERSE_JSON = '/data/lipari_workshop/WB_SUPERTYPE_to_SpC_MAPPING/hann_results.json'
 QUERY_SUBCLASS = 'Subclass_V2'   # our spinal subclass label
 QUERY_GROUP    = 'Group_V2'      # our spinal group label
 OVERLAP_MIN    = 0.50            # min Wilson-lower-bound overlap for "reciprocal"

@@ -1,10 +1,16 @@
-# Session 2 — Reciprocal mapping: spinal cord ↔ mouse whole brain (Interactive Part 2B)
+# Session 2 — Spinal-cord annotation & whole-brain mapping (Interactive Part 2)
 
-Materials for the **"map to whole brain"** interactive section
-(`workshop_prep.txt` Part 2B). Students relate the Session‑1 spinal‑cord (SpC)
-taxonomy to the Allen **mouse whole‑brain (AIT21)** atlas with a *reciprocal*
-cell-type mapping, then project the result onto the ABC mouse‑brain **MERFISH
-spatial atlas** to see *where in the brain* the spinal‑like cell types live.
+Materials for the second interactive session of the **Lipari Genomics Workshop
+2026** ([repo overview](../README.md)). Students first **annotate** classic
+spinal-cord (SpC) cell types from Session 1, then relate that taxonomy to the
+Allen **mouse whole-brain (AIT21)** atlas with **MapMyCells**, and project the
+result onto the ABC mouse-brain **MERFISH spatial atlas** to see *where in the
+brain* the spinal-like cell types live. Run it in the pre-built **Code Ocean**
+capsule (<https://codeocean.allenneuraldynamics.org/>).
+
+> **Student notebooks (run in order):**
+> 1. `notebooks/session2_literature_cell_types.ipynb` — Part 2A: name the cell types
+> 2. `notebooks/session2_webportal_mapping_spatial.ipynb` — Part 2B: map to the whole brain (MapMyCells)
 
 ## The reciprocal idea
 [`cell_type_mapper`](https://github.com/AllenInstitute/cell_type_mapper) (the
@@ -41,14 +47,17 @@ AIT21 (≤150 seeded cells/supertype) into a small, **student‑shippable**
 `wb_subsampled_ABC.h5ad` and averages it.
 
 ## Setup
+On Code Ocean the environment and data are already provided; just open the two
+student notebooks and run the cells. To run elsewhere:
 ```bash
 pip install -r requirements.txt          # Python 3.12
-jupyter lab notebooks/session2_reciprocal_mapping_spatial.ipynb
+jupyter lab notebooks/session2_literature_cell_types.ipynb        # Part 2A (first)
+jupyter lab notebooks/session2_webportal_mapping_spatial.ipynb    # Part 2B
 ```
-The student notebook only **loads** the pre‑computed results shipped read‑only in
-`/data/lipari_workshop/` (below) plus the bundled MERFISH atlas, and writes any
-outputs to `/results/` — it does not run any mapping live, so `cell_type_mapper`
-is needed only to rebuild the artifacts.
+The student notebooks only **load** the pre‑computed results in
+**`/data/lipari_workshop/`** (below) plus the bundled MERFISH atlas — they do not
+run any mapping live, so `cell_type_mapper` is needed only to rebuild the
+artifacts.
 
 ## Layout
 ```
@@ -64,13 +73,18 @@ session2/
 │   ├── 07_build_supertype_reciprocal_artifacts.py  # overlap-coefficient reciprocity tables
 │   └── mapping_io.py                    # reciprocal-mapping helpers (from the tutorial, extended)
 └── notebooks/
-    ├── _build_notebook.py               # regenerates the reciprocal-mapping .ipynb
-    ├── _build_webportal_notebook.py     # regenerates the MapMyCells web-portal .ipynb
     ├── _build_literature_notebook.py    # regenerates the literature cell-type .ipynb
+    ├── _build_webportal_notebook.py     # regenerates the MapMyCells web-portal .ipynb
     ├── session2_literature_cell_types.ipynb        # Part 2A: find textbook cell types (run first)
     ├── session2_webportal_mapping_spatial.ipynb    # Part 2B: map to mouse brain (MapMyCells portal)
-    └── session2_reciprocal_mapping_spatial.ipynb   # Part 2B: map to mouse brain (reciprocal, local)
+    └── old/                             # advanced, fully-local reciprocal-mapping variant
+        ├── _build_notebook.py                          #   (no web portal; for the Python-comfortable)
+        └── session2_reciprocal_mapping_spatial.ipynb
 ```
+The two notebooks at the top are the live student notebooks. The **web-portal**
+notebook is the primary Part 2B path (map on MapMyCells, visualize back here); the
+fully-local **reciprocal** variant under `old/` does the same mapping without the
+web portal and is optional for anyone comfortable in Python.
 
 ### Notebook order
 `session2_literature_cell_types.ipynb` comes **first**: the descriptive `Group_V2`
@@ -83,11 +97,7 @@ groups on marker combinations, view the markers on the snRNA UMAP and in dotplot
 the real name is uncovered only in each target's reveal. Only then do they map the
 *whole* taxonomy onto the mouse whole brain with the web-portal (or reciprocal) notebook.
 
-## Workshop data (read‑only in `/data/lipari_workshop/`, built by the processing scripts)
-
-The processing scripts write to `/results/`; the built artifacts are distributed
-to students **read‑only under `/data/lipari_workshop/`**, which is where the
-notebooks read them from.
+## Workshop data (provided in `/data/lipari_workshop/`, built by the processing scripts)
 
 | File | What it is |
 |------|------------|
@@ -102,12 +112,12 @@ notebooks read them from.
 | `wb_supertype_means.h5ad` | 1201 mouse‑WB supertype mean profiles (subsampled) — the supertype reverse query. |
 | `wb_subsampled_ABC.h5ad` | Student‑sized mouse‑WB snRNA (≤150 cells/supertype, RAW counts) — the shippable stand‑in for the 224 GB atlas. |
 
-The MERFISH spatial atlas is read in place from the external
-`/data/mouse_wb_spatial_tutorial/` tutorial bundle; the reverse mapping
-reference is (re)built into `/results/SpC_V2_ref/` (see `00_config.py`). To
-(re)download the ABC MERFISH atlas from scratch, run
-`00_download_spatial_atlas.py` (see the repo-root [`README.md`](../README.md) for
-full ABC Atlas download instructions and links).
+The MERFISH spatial atlas and the two mapping references are read in place from
+`/data/mouse_wb_spatial_tutorial/` and `/scratch/SpC_consensus_ref/` (see
+`00_config.py`); the web-portal notebook also reads its MapMyCells results `.zip`
+(`PORTAL_OUTPUT`) from `/data/lipari_workshop/`. To (re)download the ABC MERFISH
+atlas from scratch, run `00_download_spatial_atlas.py` (its module docstring lists
+the ABC Atlas cache commands, sizes, and links).
 
 ### Rebuild
 ```bash

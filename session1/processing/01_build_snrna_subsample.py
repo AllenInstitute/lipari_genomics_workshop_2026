@@ -152,6 +152,8 @@ def main():
     obs['qc_status'] = np.where(obs['keeper_cells'], 'passed_qc', 'filtered_out')
     for col in cfg.V2_ANNOTATION_COLS:
         obs[col] = fin_obs[col].reindex(selected_index).values
+    # Correct known source-atlas transmitter mislabels (e.g. Sp8 CHRNA5 GABA-Gly).
+    cfg.apply_v2_group_relabel(obs)
     # species: prefer the filtered-object value, backfill from unfiltered for QC-failed.
     species_fin = fin_obs[cfg.SPECIES_KEY].reindex(selected_index)
     obs['species'] = species_fin.fillna(obs[cfg.SPECIES_KEY])

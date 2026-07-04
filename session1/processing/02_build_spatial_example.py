@@ -59,6 +59,9 @@ def main():
     print(f'Combined spatial object: {adata.n_obs:,} neurons across '
           f'{adata.obs["_section"].nunique()} sections, {adata.n_vars} genes')
 
+    # Correct known source-atlas transmitter mislabels (e.g. Sp8 CHRNA5 GABA-Gly).
+    adata.obs = cfg.apply_v2_group_relabel(adata.obs)
+
     # ── Standardize spatial coordinates into obsm['spatial'] (cellxgene/scanpy) ─
     if {'_plot_x', '_plot_y'}.issubset(adata.obs.columns):
         adata.obsm['spatial'] = adata.obs[['_plot_x', '_plot_y']].to_numpy(float)
@@ -66,6 +69,10 @@ def main():
     for c in adata.obs.columns:
         if adata.obs[c].dtype == object:
             adata.obs[c] = adata.obs[c].astype('category')
+
+    # Normalize rexed_lamina: drop the non-lamina 'example' placeholder, order the
+    # laminae dorsal->ventral, and persist the curated lamina palette into uns.
+    cfg.clean_rexed_lamina(adata)
 
     # ── Provide log-normalized values in X for marker visualization ────────────
     adata.layers['counts'] = adata.X.copy()

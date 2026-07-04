@@ -1,24 +1,30 @@
 # Session 1 — Spinal cord snRNA QC, clustering & visualization (Interactive Part 1)
 
-Materials for the first interactive session (50 min): single-nucleus spinal-cord
-QC, clustering, and visualization, plus an intro to **cellxgene** and the **ABC
-whole-brain atlas**.
+Materials for the first interactive session (~50 min) of the **Lipari Genomics
+Workshop 2026** ([repo overview](../README.md)): single-nucleus spinal-cord QC,
+clustering, and visualization, plus an intro to **cellxgene** and the **ABC
+whole-brain atlas**. Run it in the pre-built **Code Ocean** capsule
+(<https://codeocean.allenneuraldynamics.org/>) — just open the notebook below and
+run the cells.
+
+> **Notebook:** `notebooks/session1_qc_clustering_visualization.ipynb`
 
 ## Setup
-Install the pinned Python environment (Python 3.12):
+On Code Ocean the environment and data are already provided. To run elsewhere,
+install the pinned Python environment (Python 3.12):
 ```bash
 pip install -r requirements.txt
 ```
 The student notebook only needs the "core" + "Jupyter" packages; `torch` /
 `scvi-tools` (bottom of `requirements.txt`) are required **only** to re-run the
-GPU rebuild script `01b`. To run the seminar on a new machine you need the repo
-plus the read-only workshop objects distributed in `/data/lipari_workshop/`
-(`SpC_workshop_snRNA.h5ad`, `SpC_workshop_spatial_example.h5ad` and its two
-spatial companions `SpC_workshop_spatial_nn_overlay.tsv.gz` /
-`SpC_workshop_spatial_meta.json`); the notebook reads those and **writes
-everything it produces to `/results/`**.
-Keep **~16 GB free on the `/results` volume** — the notebook writes a ~6 GB
-processed object plus a ~3 GB cellxgene copy (and a same-volume temp copy).
+GPU rebuild scripts (`01b` / `02b`). The notebook **reads** its input objects from
+**`/data/lipari_workshop/`** (`SpC_workshop_snRNA.h5ad`,
+`SpC_workshop_snRNA_session2_clean.h5ad`, `SpC_workshop_spatial_example.h5ad` and
+its two spatial companions `SpC_workshop_spatial_nn_overlay.tsv.gz` /
+`SpC_workshop_spatial_meta.json`).
+It **writes** its cellxgene exports to the writable `/results/` volume, so keep
+**~16 GB free on `/results`** — the notebook writes a ~6 GB processed object plus a
+~3 GB cellxgene copy (and a same-volume temp copy).
 
 ## Layout
 ```
@@ -29,7 +35,9 @@ session1/
 │   ├── 01b_scvi_umap_prefilter.py    # trains scVI on the full (pre-filter) subset;
 │   │                                 #   adds X_scVI + X_umap_prefilter to the h5ad
 │   │                                 #   and saves /results/SpC_workshop_scvi_model/
-│   └── 02_build_spatial_example.py   # -> /results/SpC_workshop_spatial_example.h5ad
+│   ├── 02_build_spatial_example.py   # -> /results/SpC_workshop_spatial_example.h5ad
+│   ├── 02b_build_session2_clean.py   # atlas-filter + retrain scVI -> clean Session-2
+│   │                                 #   object (+ cellxgene-safe copy) in /results/
 │   ├── _taxonomy_colors.py           # carries the curated V2 palette from the atlas
 │   └── make_safe_h5ad.py             # sanitize any h5ad for cellxgene (drop NaNs, etc.)
 └── notebooks/
@@ -37,9 +45,9 @@ session1/
 ```
 
 ## Workshop data
-Built once by the processing scripts (they write to `/results/`) and distributed
-to students **read-only under `/data/lipari_workshop/`**, which is where the
-notebook reads them from (writing any outputs back to `/results/`):
+Provided (read-only) in **`/data/lipari_workshop/`**, where the notebook reads
+them; the rebuild scripts below regenerate them into `/results/` (where cellxgene
+reads):
 
 | File | What it is |
 |------|------------|
@@ -48,6 +56,9 @@ notebook reads them from (writing any outputs back to `/results/`):
 | `SpC_workshop_spatial_example.h5ad` | The three representative cross-species sections (human, macaque, mouse) from the manuscript Figure 2, concatenated. Transformed tissue coordinates in `obs['_plot_x'/'_plot_y']` (mirrored into `obsm['spatial']`) plus V2 / Rexed-lamina annotations and the curated `Group_V2` palette in `uns`. |
 | `SpC_workshop_spatial_nn_overlay.tsv.gz` | Non-neuron cells (coordinates + `Group_V2`) for those three sections, drawn as the faint grey tissue background in the spatial panel. |
 | `SpC_workshop_spatial_meta.json` | Per-section crop bounds, the representative-section ids, and the full `Group_V2` colour map used by the spatial panel. |
+| `SpC_workshop_snRNA_session2_clean.h5ad` | **Clean** Session-2 starting point: the Session-1 subsample with the **published atlas filtering** applied (only `qc_status == 'passed_qc'` nuclei kept), then **scVI retrained from scratch** on just those nuclei. **`X` holds the raw counts** (`uint16`); freshly integrated `obsm['X_scVI']` / `obsm['X_umap']`, plus the atlas embeddings `obsm['X_scVI_atlas']` / `obsm['X_umap_atlas']` for reference. |
+| `SpC_workshop_snRNA_session2_clean_cellxgene.h5ad` | cellxgene-safe copy of the clean Session-2 object (run through `make_safe_h5ad.py`): **`X` is log1p-normalized** for gene visualization, with the **raw counts kept in `layers['counts']`**. |
+| `SpC_workshop_session2_scvi_model/` | The scVI model retrained on the clean (atlas-filtered) nuclei, behind the clean object's `X_scVI` / `X_umap`. |
 
 ### Rebuild
 ```bash
@@ -55,8 +66,9 @@ cd processing
 python 01_build_snrna_subsample.py    # build the subsample h5ad
 python 01b_scvi_umap_prefilter.py     # GPU: train scVI, add pre-filter embeddings + save model
 python 02_build_spatial_example.py    # build the spatial example
+python 02b_build_session2_clean.py    # GPU: atlas-filter + retrain scVI -> clean Session-2 object
 ```
-`01b` needs a GPU. NOTE: it imports `torch`/`scvi` **before** numpy/anndata/scanpy
+`01b` and `02b` need a GPU. NOTE: they import `torch`/`scvi` **before** numpy/anndata/scanpy
 on purpose — importing a numpy/scipy BLAS first shadows the library torch needs and
 scVI training dies with `CUBLAS_STATUS_NOT_INITIALIZED`.
 
@@ -65,10 +77,10 @@ scVI training dies with `CUBLAS_STATUS_NOT_INITIALIZED`.
 `obs`/`var` only (NaNs dropped or stringified), bounded category counts, float32 `X`,
 no stray `raw`/`obsm`/`varm` DataFrames, and only `*_colors` palettes aligned to their
 categorical column kept in `uns`. The `/uns` prune step opens the input **in place**,
-so copy to a writable location (e.g. `/results`) first:
+so copy to scratch first:
 ```bash
-cp /data/lipari_workshop/SpC_workshop_snRNA.h5ad /results/in.h5ad
-python make_safe_h5ad.py /results/in.h5ad /results/SpC_workshop_snRNA_cellxgene.h5ad
+cp /data/lipari_workshop/SpC_workshop_snRNA.h5ad /scratch/in.h5ad
+python make_safe_h5ad.py /scratch/in.h5ad /scratch/SpC_workshop_snRNA_cellxgene.h5ad
 ```
 
 ## Reproducibility

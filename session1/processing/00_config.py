@@ -13,6 +13,7 @@ import os
 import random
 
 import numpy as np
+import pandas as pd
 
 # ── Global seed ────────────────────────────────────────────────────────────────
 # A single seed drives python `random`, numpy, scanpy, and (if present) torch so
@@ -71,6 +72,110 @@ SPATIAL_META_OUT = os.path.join(RESULTS_DIR, 'SpC_workshop_spatial_meta.json')
 
 # Annotation columns copied from the filtered object onto kept cells.
 V2_ANNOTATION_COLS = ['Class_V2', 'Subclass_V2', 'Supergroup_V2', 'Group_V2']
+
+# ── Canonical taxonomy corrections ─────────────────────────────────────────────
+# The source atlas mislabels the ventral inhibitory (Renshaw) interneuron
+# `Sp8 CHRNA5 GABA-Gly` as glutamatergic (Class_V2=Glut / Subclass_V2=Glut-V /
+# Supergroup_V2='Glut-V spoke'). It is a GABAergic/glycinergic cell, so we force it
+# onto the GABA arm; applying this in the builders keeps every workshop object (and
+# its cellxgene copy) consistent even if /results is regenerated from the source.
+V2_GROUP_RELABEL = {
+    'Sp8 CHRNA5 GABA-Gly': {
+        'Class_V2': 'GABA',
+        'Subclass_V2': 'GABA-V',
+        'Supergroup_V2': 'GABA-V spoke',
+    },
+    # Split group: 4 of 5 clusters (n_202-205, ~90% of cells) are GABA-M, while the
+    # minor cluster n_6 was GABA-D. Collapse the whole group onto its dominant
+    # GABA-M (GABA-M TFAP2B) subclass so it renders as one coherent block.
+    'Sp4M PAX5 GABA-Gly': {
+        'Class_V2': 'GABA',
+        'Subclass_V2': 'GABA-M',
+        'Supergroup_V2': 'GABA-M TFAP2B',
+    },
+}
+
+
+def apply_v2_group_relabel(obs, group_key=GROUP_KEY, relabel=None):
+    """Force curated Class/Subclass/Supergroup_V2 for specific Group_V2 values.
+
+    Operates in place on a pandas ``obs`` DataFrame (columns may be categorical or
+    object) and returns it, correcting known source-atlas transmitter mislabels so
+    all downstream workshop objects agree. Relabelled columns are left as plain
+    object dtype; callers convert them back to ``category`` as usual.
+    """
+    relabel = V2_GROUP_RELABEL if relabel is None else relabel
+    if group_key not in obs.columns:
+        return obs
+    groups = obs[group_key].astype(str).to_numpy()
+    for group, fixes in relabel.items():
+        mask = groups == group
+        if not mask.any():
+            continue
+        for col, value in fixes.items():
+            if col not in obs.columns:
+                continue
+            vals = obs[col].astype(str).to_numpy(dtype=object)
+            vals[mask] = value
+            obs[col] = vals
+            print(f'    relabel: {int(mask.sum())} "{group}" cells -> {col}={value}')
+    return obs
+
+# ── Rexed lamina palette / ordering ────────────────────────────────────────────
+# Curated dorsal-to-ventral lamina colours + ordering (mirrors the manuscript
+# Figure 2 spatial panels). `'example'` is NOT a lamina: it is a placeholder from
+# the upstream GeoJSON where a "representative hemisphere" marker polygon leaked
+# into the lamina-assignment step, so cells inside that marker (but not inside any
+# real lamina polygon) got the literal label 'example'. We drop it back to '' so
+# it renders as unassigned grey, exactly like any other unlabelled neuron.
+REGION_PALETTE = {
+    'L':   '#400000',
+    '1':   '#217b9b',
+    '2i':  '#c56e76',
+    '2o':  '#b12864',
+    '3':   '#ed278a',
+    '4L':  '#0fce45',
+    '4M':  '#458271',
+    '5L':  '#bce233',
+    '5M':  '#ea49ea',
+    '6L':  '#595907',
+    '6M':  '#720dcc',
+    '7':   '#ffd00b',
+    '8':   '#d87b00',
+    '9':   '#841921',   # lamina IX – skeletal motor neurons
+    '10':  '#37c6f4',
+    'IML': '#665cc1',
+    'IMM': '#9991af',
+    '':    '#b8b8b8',   # unassigned
+}
+
+REGION_ORDER = ['L', '1', '2o', '2i', '3', '4L', '4M', '5M', '5L', '6M', '6L',
+                '7', '8', '10', 'IMM', 'IML', '9', '']
+
+# Non-lamina placeholder labels to fold back into '' (unassigned).
+REXED_LAMINA_DROP = ('example',)
+
+
+def clean_rexed_lamina(adata, col='rexed_lamina'):
+    """Normalize the ``rexed_lamina`` column on an AnnData in place.
+
+    Drops non-lamina placeholder labels (see ``REXED_LAMINA_DROP``) to ''
+    (unassigned), sets an ordered categorical following ``REGION_ORDER`` (only
+    categories actually present, with any unexpected extras appended), and stores
+    a matching ``uns['<col>_colors']`` palette from ``REGION_PALETTE`` so the
+    colours travel with the object like the other curated palettes.
+    """
+    if col not in adata.obs.columns:
+        return adata
+    vals = adata.obs[col].astype(str)
+    vals = vals.replace({lbl: '' for lbl in REXED_LAMINA_DROP})
+    present = set(vals.unique())
+    cats = [c for c in REGION_ORDER if c in present]
+    cats += [c for c in sorted(present) if c not in REGION_ORDER]  # keep any extras
+    adata.obs[col] = pd.Categorical(vals, categories=cats, ordered=True)
+    adata.uns[f'{col}_colors'] = [REGION_PALETTE.get(c, '#b8b8b8') for c in cats]
+    return adata
+
 
 # Precomputed QC metrics + propagated taxonomy carried from the UNFILTERED object
 # for every cell (these drive the sciduck class-specific QC in the notebook).

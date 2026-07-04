@@ -36,7 +36,7 @@ md("""# Session 2 - Find the textbook cell types in the atlas
 **Lipari Genomics Workshop 2026 - Interactive Part 2A (before the whole-brain mapping)**
 
 In Session 1 you built a spinal-cord (SpC) taxonomy of cell types. Each one has a
-descriptive `Group_V2` name (like `Sp2i NMU TAC3 Glut`) - but those names basically
+descriptive `Group_V2` name (like `aMN NEFH Chol`) - but those names basically
 *spell out the answer*, so for this exercise **we hide them**. Instead every group
 appears as an anonymous **`Group` ID**: its subclass plus a number, e.g. `Glut-D 7`,
 `GABA-V 3`. Your job is to work out which anonymous group is which **famous
@@ -74,14 +74,11 @@ md("""## 0. Setup
 
 Import libraries, **fix all random seeds**, and load the two datasets:
 
-- the Session-1 **snRNA** object (`SpC_workshop_snRNA.h5ad`) - raw counts,
+- the Session-1 **snRNA** object (`/data/lipari_workshop/SpC_workshop_snRNA.h5ad`) - raw counts,
   which we normalise/log exactly as in Session 1, plus the carried atlas **UMAP**, and
-- the **example spatial** object (`SpC_workshop_spatial_example.h5ad`) -
+- the **example spatial** object (`/data/lipari_workshop/SpC_workshop_spatial_example.h5ad`) -
   three representative cross-species sections (human, macaque, mouse), each nucleus
-  carrying its cell-type label, its Rexed lamina, and a 947-gene spatial panel.
-
-The pre-built workshop artifacts are distributed **read-only** in `DATA_DIR`
-(`/data/lipari_workshop`).""")
+  carrying its cell-type label, its Rexed lamina, and a 947-gene spatial panel.""")
 code("""import os, json, random, warnings
 import numpy as np
 import pandas as pd
@@ -100,11 +97,10 @@ sc.settings.seed = SEED
 sc.settings.verbosity = 1
 sc.settings.set_figure_params(dpi=90, frameon=False, figsize=(6, 6))
 
-DATA_DIR     = '/data/lipari_workshop'   # read-only pre-built workshop artifacts
-SNRNA_H5AD   = f'{DATA_DIR}/SpC_workshop_snRNA.h5ad'
-SPATIAL_H5AD = f'{DATA_DIR}/SpC_workshop_spatial_example.h5ad'
-SPATIAL_NN   = f'{DATA_DIR}/SpC_workshop_spatial_nn_overlay.tsv.gz'
-SPATIAL_META = f'{DATA_DIR}/SpC_workshop_spatial_meta.json'
+SNRNA_H5AD   = '/data/lipari_workshop/SpC_workshop_snRNA.h5ad'
+SPATIAL_H5AD = '/data/lipari_workshop/SpC_workshop_spatial_example.h5ad'
+SPATIAL_NN   = '/data/lipari_workshop/SpC_workshop_spatial_nn_overlay.tsv.gz'
+SPATIAL_META = '/data/lipari_workshop/SpC_workshop_spatial_meta.json'
 UMAP_BASIS   = 'X_umap_atlas'      # carried atlas UMAP embedding
 SECRET       = 'Group_V2'          # the descriptive name we are HIDING
 GROUPBY      = 'Group'             # the anonymous ID students work with
@@ -149,9 +145,9 @@ md("""### Anonymise the cell types
 
 Here is the trick that turns this into a puzzle. We replace each descriptive
 `Group_V2` name with an anonymous **`Group` ID** = its **subclass + a number**,
-numbered within each subclass in the taxonomy's own order. So `Sp2i NMU TAC3 Glut`
-might become `Glut-D 7` - you can see it is a **dorsal excitatory** neuron (subclass
-`Glut-D`), but nothing about *which* one.
+numbered within each subclass in the taxonomy's own order. So a motor neuron name
+like `aMN NEFH Chol` might become `sMN 3` - you can see it is a **somatic motor**
+neuron (subclass `sMN`), but nothing about *which* pool.
 
 We build the hidden `Group_V2 <-> Group` lookup (`SECRET2ANON` / `ANON2SECRET`), add
 the anonymous `Group` column to **both** datasets, and carry the colours across. The
@@ -506,11 +502,12 @@ MY_CSF_GROUP = csf_rank.index[0]
 describe_group_location(MY_CSF_GROUP)
 explore_groups_umap_and_space(MY_CSF_GROUP, title='CSF-cN candidate')""")
 
-md("""**Step 4 - reveal.** The CSF-contacting neurons are **`CSF-cN PKD2L1 GABA-Gly`** -
-they even get their **own subclass** (`CSF-cN`), because nothing else in the cord looks
-like them. `PKD2L1` is not in the spatial panel, but highlighting the group in space
-shows every cell pinned to the **central canal (lamina X)**, confirming the anatomy.""")
-code("""CSF_ANSWER = 'CSF-cN PKD2L1 GABA-Gly'
+md("""**Step 4 - reveal.** Run the cell below to uncover the answer. This group gets its
+**own subclass** because nothing else in the cord looks like it. `PKD2L1` is not in
+the spatial panel, but in space every cell pins to the **central canal (lamina X)**,
+confirming the anatomy.""")
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+CSF_ANSWER = _ans['csf']
 csf_anon = SECRET2ANON[CSF_ANSWER]
 print(f'  {csf_anon:>12}  =  {CSF_ANSWER}')
 highlight_groups_in_space(csf_anon,
@@ -555,11 +552,12 @@ MY_ITCH_GROUP = itch_rank.index[0]
 describe_group_location(MY_ITCH_GROUP)
 explore_groups_umap_and_space(MY_ITCH_GROUP, title='Itch candidate')""")
 
-md("""**Step 4 - reveal.** Uncover the real names. The itch neurons are the paired
-lamina-2 groups **`Sp2i NMU TAC3 Glut`** and **`Sp2-3 TAC3 NMU Glut`** - the two that
-topped your ranking. Painted together they tile the superficial dorsal horn across all
-three species, and `TAC3` (in the spatial panel) concentrates in the same band.""")
-code("""ITCH_ANSWER = ['Sp2i NMU TAC3 Glut', 'Sp2-3 TAC3 NMU Glut']
+md("""**Step 4 - reveal.** Run the cell below to uncover the real names. The itch neurons
+are a **paired** lamina-2 population - the two groups that topped your ranking.
+Painted together they tile the superficial dorsal horn across all three species, and
+`TAC3` (in the spatial panel) concentrates in the same band.""")
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json')) #Uncomment this when you're ready to check your answers!
+ITCH_ANSWER = _ans['itch']
 for g in ITCH_ANSWER:
     print(f'  {SECRET2ANON[g]:>12}  =  {g}')
 itch_anon = [SECRET2ANON[g] for g in ITCH_ANSWER]
@@ -611,12 +609,13 @@ MY_RENSHAW_GROUP = renshaw_rank.index[0]
 describe_group_location(MY_RENSHAW_GROUP)
 explore_groups_umap_and_space(MY_RENSHAW_GROUP, title='Renshaw candidate')""")
 
-md("""**Step 4 - reveal.** The Renshaw cells are **`Sp8 CHRNA5 GABA-Gly`** - the lone
-group defined by the nicotinic subunit `CHRNA5`, sitting in ventral lamina 8 beside
-the motor neurons. Both `CHRNA5` and `SYNPR` are in the spatial panel, so we can
-confirm the ventral position directly. For contrast we also paint an **alpha
+md("""**Step 4 - reveal.** Run the cell below to uncover the Renshaw cell group - the
+lone group defined by the nicotinic subunit `CHRNA5`, sitting in **ventral lamina 8**
+beside the motor neurons. Both `CHRNA5` and `SYNPR` are in the spatial panel, so we
+can confirm the ventral position directly. For contrast we also paint an **alpha
 motor-neuron pool** (`aMN ... Chol`) - the cells Renshaw neurons inhibit.""")
-code("""RENSHAW_ANSWER = 'Sp8 CHRNA5 GABA-Gly'
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+RENSHAW_ANSWER = _ans['renshaw']
 renshaw_anon = SECRET2ANON[RENSHAW_ANSWER]
 print(f'  {renshaw_anon:>12}  =  {RENSHAW_ANSWER}')
 highlight_groups_in_space(renshaw_anon, title='Renshaw cells (reveal)')
@@ -655,20 +654,19 @@ the deep dorsal horn**, and it is **rarer** than the local interneurons around i
 neurons"). They FACS-purified `Phox2a`-lineage nuclei from mouse dorsal horn
 (`Phox2a::Cre; Sun1-GFP`) and deep-sequenced them with **Smart-seq2**, resolving the
 anterolateral system into **five molecular classes, `ALS1`-`ALS5`**. In this
-exercise we *hypothetically could not obtain their raw Smart-seq2 counts*, so rather
+exercise we *could not obtain their raw Smart-seq2 counts*, so rather
 than transferring their labels onto our cells we will **use their published marker
 genes** to (1) find this projection-neuron family in our own atlas and (2) - for
 extra credit - line each `ALS1`-`ALS5` class up with one of our groups.
 
 **Step 1 - rank the groups.**""")
-code("""ALS_MARKERS = ['PHOX2A', 'RELN', 'LMX1B', 'TACR1', 'GDA']
+code("""ALS_MARKERS = ['PHOX2A', 'RELN', 'LMX1B', 'TACR1', 'GDA','ZFHX3','DAB1','SLC17A6']
 als_rank = rank_groups_by_markers(ALS_MARKERS, top=12)
 print('Top candidates:'); print(als_rank.head(5).round(2))""")
 
 md("""**Step 2 - see the markers.** On the UMAP notice that several **sibling groups**
 share the `PHOX2A` signal - a *family* of related projection-neuron types - rather
-than a single island. The dotplot across the top candidates makes the shared
-`PHOX2A` / `RELN` / `LMX1B` signature obvious.""")
+than a single island..""")
 code("""plot_genes_on_umap(ALS_MARKERS)
 als_candidates = als_rank.head(7).index.tolist()
 plot_marker_dotplot(ALS_MARKERS, als_candidates, title='Projection-neuron marker dotplot')""")
@@ -683,13 +681,13 @@ for g in MY_ALS_GROUPS:
     describe_group_location(g)
 explore_groups_umap_and_space(MY_ALS_GROUPS, title='Projection-neuron candidates')""")
 
-md("""**Step 4 - reveal.** The ascending projection neurons are the **`PHOX2A` family**:
-`Sp1-5Lx PHOX2A BCL11A/POU6F2/CALCR/CREB5 Glut` (the `Lx` literally denotes the
-**lamina I -> deep** span of the anterolateral system). `PHOX2A` is not in the spatial
-panel, but the shared selector **`LMX1B`** is - and it marks the dorsal-horn excitatory
-territory these cells belong to.""")
-code("""ALS_ANSWER = ['Sp1-5Lx PHOX2A BCL11A Glut', 'Sp1-5Lx PHOX2A POU6F2 Glut',
-              'Sp1-5Lx PHOX2A CALCR Glut', 'Sp1-5Lx PHOX2A CREB5 Glut']
+md("""**Step 4 - reveal.** Run the cell below to uncover the `PHOX2A` projection-neuron
+family (the `Lx` in their name literally denotes the **lamina I -> deep** span of the
+anterolateral system). `PHOX2A` is not in the spatial panel, but the shared selector
+**`LMX1B`** is - and it marks the dorsal-horn excitatory territory these cells belong
+to.""")
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+ALS_ANSWER = _ans['als']
 ALS_ANSWER = [g for g in ALS_ANSWER if g in SECRET2ANON]
 for g in ALS_ANSWER:
     print(f'  {SECRET2ANON[g]:>12}  =  {g}')
@@ -765,41 +763,24 @@ for als, w in ALS_SIGNED.items():
     print(f'  {als}   ->   {short[best]:<8}  ({score[best]:+.2f})   your guess: '
           f'{MY_ALS_MATCH.get(als, \"-\"):<8} [{mark}]')""")
 
-md("""**The answer.** Four of our groups carry the five classes, with the two
-superficial `Cdh12`+ classes (`ALS2`/`ALS3`) collapsing onto our single `POU6F2`
-group:
-
-| Bell et al. class | our `Group_V2` | deciding evidence |
-|---|---|---|
-| `ALS1` | `Sp1-5Lx PHOX2A CALCR Glut` | highest `Nmu`, lowest `Cdh12` - the Nmu+/Cdh12- lamina-I type |
-| `ALS2` + `ALS3` | `Sp1-5Lx PHOX2A POU6F2 Glut` | `Cdh12`+ with `Grik1`/`Calb1`/`Necab2` - the superficial Cdh12+ cells (one group spans their two classes) |
-| `ALS4` | `Sp1-5Lx PHOX2A BCL11A Glut` | the only `Bcl11a`-high group; matches ALS4's deep (lamina V) `Bcl11a` marker |
-| `ALS5` | `Sp1-5Lx PHOX2A CREB5 Glut` | highest `Penk`/`Ret` - the deep/ventral class |
-
-**Wait - isn't `Nmu` the itch marker from Target 2?** Exactly, and that is the trap.
-Our lamina-II **itch** interneurons (`Sp2i NMU TAC3 Glut`, `Sp2-3 TAC3 NMU Glut`)
-express *more* `Nmu` than our `CALCR` group - so ranking on `Nmu` **across the whole
-atlas** would wrongly land on the Target-2 itch cells, not on `ALS1`. What separates
-them is **projection identity**: `ALS1` (like all of Bell et al.'s classes) is
-`Phox2a`-lineage and `Tacr1`(NK1R)+/`Tac1`+, whereas the `Nmu` itch interneurons are
-`Tacr1`-/`Tac1`- and are **not** `Phox2a`-lineage (they were never in Bell et al.'s
-sorted dataset). That is why the scoring is deliberately **restricted to the four
-`Phox2a` projection groups** - within that family, `CALCR` is the `Nmu`+/`Cdh12`-
-member, so it is our `ALS1`.
-
-**Caveats - why this is only a best guess.** We never mapped the raw data: this is a
-*marker-only*, *cross-species* correspondence (Bell et al. is mouse-only), and **5
-mouse classes collapse onto 4 multi-species groups**. Two of their markers also
-behave differently in *our* data - `Gpr88` is near-zero across all our neurons and
-`Erbb4` is broadly expressed - so the call leans on `Nmu`/`Cdh12`/`Bcl11a`/`Penk`/
-`Ret`, **not** `Gpr88`/`Erbb4`. A defensible assignment would need their counts and a
-proper label-transfer (the whole-brain mapping in the next notebook does exactly
-that).""")
+md("""**The answer.** Run the cell below to see how each Bell et al. ALS class maps onto
+our four `PHOX2A` groups, along with an explanation of the `Nmu` trap that separates
+`ALS1` from the itch interneurons.""")
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+print('Bell et al. ALS1-5  ->  our Group_V2:')
+print(f'  (ALS2 and ALS3 both collapse onto our single POU6F2 group)\\n')
+for row in _ans['als_table']:
+    print(f"  {row['class']:<15}  ->  {row['group']}")
+    print(f"    evidence: {row['evidence']}\\n")
+print('--- The Nmu trap ---')
+print(_ans['als_trap'])""")
 code("""# Verify the trap: Nmu is HIGHER in the Target-2 itch interneurons than in our ALS1
 # (CALCR), but only the projection neurons are Tacr1(NK1R)+/Tac1+.
+_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+_als1_group = next(g for g in ALS_ANSWER if _ans['als_match']['ALS1'] in g)
 _contrast = ['NMU', 'TACR1', 'TAC1', 'TAC3', 'PHOX2A', 'ZFHX3']
 _contrast = [g for g in _contrast if g in adata.var_names]
-_grp = {'ALS1 = CALCR (projection)': 'Sp1-5Lx PHOX2A CALCR Glut'}
+_grp = {f'ALS1 = {_ans["als_match"]["ALS1"]} (projection)': _als1_group}
 _grp.update({f'{g} (itch interneuron)': g for g in ITCH_ANSWER})
 _rows = {}
 for label, secret in _grp.items():
@@ -816,22 +797,21 @@ md("""## 6. Recap & bridge to the whole-brain mapping
 
 You located four classic spinal-cord cell types in *our* atlas - starting from
 **anonymous IDs** and using only marker gene expression (ranking, UMAP, dotplots) and
-the example spatial sections:
+the example spatial sections. Run the cell below for the full recap table.""")
+code("""_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))
+print(f'{"Literature cell type":<45} {"Group_V2 group(s)":<55} {"Subclass":<22} {"Position"}')
+print('-' * 160)
+for row in _ans['recap']:
+    groups = ', '.join(row['groups'])
+    print(f"  {row['cell_type']:<43} {groups:<55} {row['subclass']:<22} {row['position']}")""")
 
-| Literature cell type | `Group_V2` group(s) | Subclass | Position |
-|---|---|---|---|
-| CSF-contacting neurons | `CSF-cN PKD2L1 GABA-Gly` | CSF-cN (inhibitory) | central canal (lamina X) |
-| Dorsal-horn itch neurons | `Sp2i NMU TAC3 Glut`, `Sp2-3 TAC3 NMU Glut` | Glut-D | superficial dorsal horn (L1-2) |
-| Renshaw cells | `Sp8 CHRNA5 GABA-Gly` | GABA-V (inhibitory) | ventral horn (L7-8) |
-| Ascending nociceptive projection neurons | `Sp1-5Lx PHOX2A BCL11A/POU6F2/CALCR/CREB5 Glut` | Glut-M | lamina I + deep dorsal horn |
-
-**The workflow you just used** - rank the anonymous groups by a marker combination,
+md("""**The workflow you just used** - rank the anonymous groups by a marker combination,
 confirm on the UMAP + dotplot, then explore the group in space - is exactly how you
 would nominate *any* literature cell type. Try it now with a type of your own: pick
 markers, rank, and explore the winner.""")
 code("""# >>> Your turn: pick markers for a cell type you know and hunt for its group. <<<
-# e.g. preganglionic autonomic (NOS1), proprioceptive relay (choose your own markers)...
-MY_MARKERS = ['NOS1']                         # <- edit
+# e.g. cholinergic neurons (choose your own markers)...
+MY_MARKERS = ['CHAT']                         # <- edit
 my_rank = rank_groups_by_markers([g for g in MY_MARKERS if g in adata.var_names], top=10)
 print(my_rank.head(5).round(2))
 plot_genes_on_umap(MY_MARKERS)
@@ -862,3 +842,24 @@ OUT = ('/code/lipari_genomics_workshop_2026/session2/notebooks/'
 with open(OUT, 'w') as f:
     nbf.write(nb, f)
 print(f'wrote {OUT} with {len(cells)} cells')
+
+# Also write a full-answer version to old/ by uncommenting the #json.load lines.
+import copy, re
+nb_full = copy.deepcopy(nb)
+replacements = [
+    ("_ans = #json.load(open('/data/lipari_workshop/session2_answers.json'))",
+     "_ans = json.load(open('/data/lipari_workshop/session2_answers.json'))"),
+    ('src="assets/', 'src="../assets/'),
+]
+for cell in nb_full['cells']:
+    src = cell['source']
+    text = ''.join(src) if isinstance(src, list) else src
+    for pat, rep in replacements:
+        text = text.replace(pat, rep)
+    cell['source'] = text
+
+OUT_FULL = ('/code/lipari_genomics_workshop_2026/session2/notebooks/old/'
+            'session2_literature_cell_types.ipynb')
+with open(OUT_FULL, 'w') as f:
+    nbf.write(nb_full, f)
+print(f'wrote {OUT_FULL} (full-answer version)')

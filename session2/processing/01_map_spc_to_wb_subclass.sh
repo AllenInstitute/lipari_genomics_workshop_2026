@@ -18,7 +18,7 @@ set -euo pipefail
 pip install --quiet 'cell_type_mapper@git+https://github.com/AllenInstitute/cell_type_mapper'
 
 # 1. Paths (kept in sync with 00_config.py).
-QUERY_H5AD="${QUERY_H5AD:-/data/lipari_workshop/SpC_workshop_snRNA.h5ad}"
+QUERY_H5AD="${QUERY_H5AD:-/results/SpC_workshop_snRNA.h5ad}"
 REF_PATH="${REF_PATH:-/data/mouse_wb_spatial_tutorial/reference/subclass_mapping_reference}"
 OUT_PATH="${OUT_PATH:-/results/SpC_workshop_WB_SUBCLASS_MAPPING}"
 

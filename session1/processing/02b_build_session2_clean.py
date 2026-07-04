@@ -23,7 +23,6 @@ Outputs:
 Run::  python 02b_build_session2_clean.py
 """
 import os
-import shutil
 import subprocess
 import sys
 
@@ -118,26 +117,58 @@ def main():
           adata.obsm[cfg.SESSION2_UMAP_KEY].shape)
 
     # ── 4. Log-normalize X for gene visualization (raw counts kept in layer) ────
+    # ── 4. Build the two matrix representations we ship ────────────────────────
+    # Raw counts stay as the smallest integer dtype that fits (counts are integers,
+    # well under 2^16), and a log-normalized matrix is derived for visualization.
+    # Everything is gzip-compressed on write.
+    import scipy.sparse as sp
+    raw_counts = adata.layers['counts']
+    cmax = float(raw_counts.max())
+    counts_dtype = 'uint16' if cmax < np.iinfo('uint16').max else 'float32'
+    raw_counts = raw_counts.astype(counts_dtype)
+
+    adata.X = adata.layers['counts'].astype('float32')   # work on a float copy
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata)
+    lognorm = adata.X.astype('float32') if sp.issparse(adata.X) \
+        else np.asarray(adata.X, dtype='float32')
 
     # Drop constant QC bookkeeping columns that are meaningless on a clean object.
     adata.obs.drop(columns=[c for c in ['keeper_cells', 'qc_status']
                             if c in adata.obs.columns], inplace=True)
 
-    os.makedirs(cfg.RESULTS_DIR, exist_ok=True)
-    adata.write(cfg.SESSION2_OUT)
-    print('Wrote', cfg.SESSION2_OUT)
-    print('  obsm now:', list(adata.obsm.keys()))
+    # Drop scVI registry bookkeeping (covariate one-hots / registry uns) so the
+    # shipped object only carries the embeddings and annotations students need.
+    for k in [k for k in list(adata.obsm) if k.startswith('_scvi')]:
+        del adata.obsm[k]
+    for k in [k for k in list(adata.uns) if k.startswith('_scvi')]:
+        del adata.uns[k]
 
-    # ── 5. cellxgene-safe copy (make_safe prunes uns in place → use a temp copy) ─
+    # ── 5. Clean working object: X = RAW COUNTS (starting point for Session 2) ──
+    os.makedirs(cfg.RESULTS_DIR, exist_ok=True)
+    clean = adata.copy()
+    clean.X = raw_counts
+    clean.layers.clear()                 # X already holds the raw counts
+    clean.uns.pop('log1p', None)         # X is not log-transformed here
+    clean.write(cfg.SESSION2_OUT, compression='gzip')
+    print('Wrote', cfg.SESSION2_OUT, '(X = raw counts)')
+    print('  obsm now:', list(clean.obsm.keys()))
+
+    # ── 6. cellxgene-safe copy: X = log1p-normalized, raw counts kept in a layer ─
+    # cellxgene visualizes X (the log-norm matrix); we also keep the raw counts in
+    # layers['counts'] so the published object carries both representations.
+    # make_safe prunes uns in place → write a temp copy first; it writes gzip output.
     script = os.path.join(os.path.dirname(__file__), 'make_safe_h5ad.py')
     tmp_path = cfg.SESSION2_CELLXGENE_OUT + '.tmp.h5ad'
-    shutil.copy(cfg.SESSION2_OUT, tmp_path)
+    cx = adata.copy()
+    cx.X = lognorm
+    cx.layers['counts'] = raw_counts
+    cx.write(tmp_path, compression='gzip')
     subprocess.run([sys.executable, script, tmp_path, cfg.SESSION2_CELLXGENE_OUT],
                    check=True)
     os.remove(tmp_path)
-    print('Wrote', cfg.SESSION2_CELLXGENE_OUT)
+    print('Wrote', cfg.SESSION2_CELLXGENE_OUT,
+          '(X = log1p-normalized, layers["counts"] = raw counts)')
 
 
 if __name__ == '__main__':
