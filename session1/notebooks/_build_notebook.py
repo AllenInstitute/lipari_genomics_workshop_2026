@@ -27,20 +27,20 @@ spinal-cord single-nucleus RNA-seq atlas.
 1. Inspect the dataset and compute **quality-control (QC)** metrics.
 2. See **why we integrate across species** (naive PCA vs. scVI).
 3. **Filter** low-quality nuclei using thresholds *you* choose.
-4. **Normalize** and view the pre-computed integrated **UMAP** of the nuclei you kept.
+4. **Normalize** and see **what proportion of each coarse cell class** QC removed.
 5. Recompute the integration and view the **final clustering** (Allen
    `transcriptomic_clustering`) alongside the reference **Group_V2 / Subclass_V2** labels.
 
 **Bonus section** (self-guided, likely *not* covered in class): marker genes,
-comparing your filtering to the reference, exporting for **cellxgene**, a spatial
-transcriptomics teaser, and links to the interactive atlases.
+exporting for **cellxgene**, a spatial transcriptomics teaser, and links to the
+interactive atlases.
 
 > Every random seed is fixed, so your results will match everyone else's exactly.
 
 **How this runs:** we will walk through sections 0-2 together, then you get some
 **free time in section 3** to tune the QC thresholds yourself and try to match the
 atlas (the precision/recall readout is your score to beat). We regroup for the
-**reveal** and finish sections 4-7 on *your* filtered data. The Bonus section is
+**reveal** and finish sections 4-5 on *your* filtered data. The Bonus section is
 yours to explore afterwards.
 
 The data: ~100 nuclei per cell-type Group per species that *passed* QC, plus a
@@ -365,7 +365,7 @@ _lab = adata.obs['n_lineage_markers'].clip(upper=2).map(
 print(adata.obs.groupby(_lab, observed=True)['solo_doublet'].mean())""")
 
 md("""**But this simple co-occurrence test is not enough.** Counting mutually-exclusive
-markers only flags the most obvious inter-lineage doublets, and it fails whenever two
+markers only flags the most obvious inter-lineage doublets in very clean sammples, and it fails if data if there is significant ambient RNA (there usually is!), whenever two
 *similar* cell types (say two neuronal subtypes) collide, or when dropout hides one
 partner's markers. That is exactly why we lean on more sophisticated methods like
 **SOLO**: it *simulates* artificial doublets by adding together pairs of real nuclei,
@@ -596,111 +596,55 @@ A few design choices worth noting:
 - The **group-level** rules delete *entire* clusters (not just individual cells) that
   are collectively low-quality, which the per-cell metrics alone would miss.""")
 
+md("""## 4. What proportion of each coarse cell class did QC remove?
+
+Rather than squint at individual nuclei on a UMAP, let's summarize the **outcome** of
+your filtering. `class_coarse` is defined for **every** nucleus (QC-passed or not), so
+we can ask a simple, practical question: for each coarse cell class, **what fraction
+was removed by QC?** Some classes are intrinsically harder to sequence cleanly (fewer
+genes, more ambient contamination) and lose a larger share.
+
+We compute this on the **full, pre-filter** set of nuclei - so the denominators are
+complete - for **your** thresholds (`your_qc`) and, for reference, the **atlas**
+thresholds (`atlas_sciduck_qc`).""")
+code("""qc_by_class = pd.DataFrame({
+    'your QC':  adata.obs.groupby('class_coarse', observed=True)['your_qc']
+                    .apply(lambda s: (s == 'remove').mean()),
+    'atlas QC': adata.obs.groupby('class_coarse', observed=True)['atlas_sciduck_qc']
+                    .apply(lambda s: (s == 'filtered_out').mean()),
+}) * 100
+qc_by_class['n_nuclei'] = adata.obs['class_coarse'].value_counts()
+qc_by_class = qc_by_class.sort_values('your QC', ascending=False)
+print('percent of each coarse class removed by QC:')
+qc_by_class.round(1)""")
+
+md("""The same numbers as a bar chart: for each coarse class, the **percent of nuclei
+filtered out** by your thresholds vs the atlas's. Classes on the left lose the most -
+if your bars sit far from the atlas's, that class is where your thresholds were the
+most/least aggressive.""")
+code("""ax = qc_by_class[['your QC', 'atlas QC']].plot.bar(
+    figsize=(8, 4), color=['#d95f0e', '#2c7fb8'])
+ax.set_ylabel('% of class removed by QC')
+ax.set_xlabel('coarse cell class')
+ax.set_title('Proportion of each coarse cell class filtered in QC')
+plt.xticks(rotation=30, ha='right')
+plt.tight_layout(); plt.show()""")
+
 md("""### Keep the clean nuclei
 
-Subset to your `keeper_cells` for the rest of the analysis. **Everything from here
-on runs on the nuclei *you* chose to keep** - so the clustering below reflects your
-own QC decisions.""")
-code("""# remember the pre-filter UMAP + both QC decisions for the final comparison
-qc_compare = adata.obs[['your_qc', 'atlas_sciduck_qc']].copy()
-qc_compare[['umap1', 'umap2']] = adata.obsm['X_umap_prefilter']
-
-adata = adata[adata.obs['keeper_cells']].copy()
-print(f'{adata.n_obs:,} nuclei retained')""")
-
-
-# ---- 4. Normalize + HVG -------------------------------------------------------
-md("""## 4. Normalize, log-transform, select highly variable genes
-
-Library-size normalize to 10,000 counts/cell, `log1p` transform, and select the
-top 2,000 **highly variable genes (HVGs)** that drive the clustering. We keep the
-raw counts in a layer so nothing is lost.""")
-code("""adata.layers['counts'] = adata.X.copy()
+Subset to your `keeper_cells`, then library-size normalize to 10,000 counts/cell and
+`log1p`-transform the retained nuclei (these log-normalized values feed the marker-gene
+plots in the Bonus section). We keep the raw counts in a `counts` layer so nothing is
+lost.""")
+code("""adata = adata[adata.obs['keeper_cells']].copy()
+adata.layers['counts'] = adata.X.copy()
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
-sc.pp.highly_variable_genes(adata, n_top_genes=2000, flavor='seurat')
 adata.raw = adata
-print('HVGs:', int(adata.var['highly_variable'].sum()))""")
+print(f'{adata.n_obs:,} nuclei retained and normalized')""")
 
-# ---- 5. UMAP of the kept cells ------------------------------------------------
-md("""## 5. Dimensionality reduction & clustering
-
-We **already clustered the scVI latent near the top** of the notebook - that is
-where the `leiden` labels came from, and the QC group-level constraints used them to
-drop whole low-quality clusters. We **do not recompute** the UMAP or Leiden here:
-instead we simply **reuse the pre-computed integrated UMAP** (`X_umap_prefilter`),
-now subset to the nuclei **you kept**. Recomputing on just this workshop subsample
-would give a slightly different embedding each time we change the QC thresholds; we
-want to keep looking at the **same** integrated map until we rebuild it on the full
-dataset (that is what section 7 does with the recomputed scVI).""")
-code("""print(adata.obs['leiden'].value_counts())""")
-
-md("""Plot the pre-computed UMAP of your kept nuclei. First, colour it by the
-**Leiden clusters** on their own - with so many clusters at `resolution=15`, we use
-the high-contrast `godsnot_102` palette and hide the (very long) legend.""")
-code("""with plt.rc_context({'figure.figsize': (8, 8)}):
-    sc.pl.embedding(adata, basis='X_umap_prefilter', color='leiden',
-                    palette=sc.pl.palettes.godsnot_102,
-                    legend_loc=None, title='your Leiden clusters')""")
-
-md("""Now colour the same UMAP by **species** and by the reference `Class_V2` and
-`Subclass_V2` labels (these are blank/`NaN` for any nuclei without a reference
-annotation).""")
-code("""with plt.rc_context({'figure.figsize': (6, 6)}):
-    sc.pl.embedding(adata, basis='X_umap_prefilter',
-                    color=['species', 'Class_V2', 'Subclass_V2'],
-                    wspace=0.4, ncols=2)""")
-
-md("""### Kept by QC, but removed from the analysis by hand
-
-Metric-based QC is only the *first* pass. After the automated filters, the atlas team
-still **removed some nuclei by hand** during clustering and annotation - cells that
-survived every numeric threshold but did not form clean, reproducible cell types (for
-example residual doublets, ambient-RNA-dominated nuclei, or study-specific artifacts).
-These nuclei **pass the automated metric filters** (`atlas_sciduck_qc == 'passed_qc'`)
-yet carry **no reference cell-type label** (`Group_V2` is `NaN`), because they were
-dropped from the published taxonomy manually.
-
-First, colour the UMAP by **`study`** - the manual removals are often concentrated in a
-few studies. Then highlight, on the same map, the nuclei that **passed our metric
-filters but were dropped from the final analysis by hand**.""")
-code("""# Kept by the automated metric QC (atlas_sciduck_qc == passed_qc) but with NO final
-# reference label (Group_V2 is NaN) -> removed from the published analysis by hand
-# during clustering/annotation, not by any numeric threshold.
-metric_kept    = adata.obs['atlas_sciduck_qc'] == 'passed_qc'
-removed_by_hand = metric_kept & adata.obs['Group_V2'].isna()
-adata.obs['analysis_status'] = np.where(
-    removed_by_hand, 'removed by hand', 'in final analysis')
-adata.obs['analysis_status'] = adata.obs['analysis_status'].astype('category')
-print(f'{int(removed_by_hand.sum()):,} nuclei passed the metric filters but were '
-      f'removed from the final analysis by hand')
-
-with plt.rc_context({'figure.figsize': (7, 7)}):
-    # study across the map
-    sc.pl.embedding(adata, basis='X_umap_prefilter', color='study',
-                    size=8, title='study', palette=sc.pl.palettes.godsnot_102)
-    # highlight the metric-passed but hand-removed nuclei
-    sc.pl.embedding(adata, basis='X_umap_prefilter', color='analysis_status',
-                    size=8, groups=['removed by hand'], na_color='#dddddd',
-                    palette={'removed by hand': '#d62728',
-                             'in final analysis': '#dddddd'},
-                    title='passed QC, removed from analysis by hand')""")
-
-md("""Which **coarse cell types** lost the most nuclei to manual curation? Rank
-`class_coarse` by how many metric-passed nuclei were removed from the final analysis by
-hand (with the share of that class removed). The classes at the top are the ones where
-metric QC alone was least sufficient and hand-curation did the most work.""")
-code("""hand = adata.obs.loc[removed_by_hand, 'class_coarse']
-metric_kept_cls = adata.obs.loc[metric_kept, 'class_coarse']
-ranking = pd.DataFrame({'removed_by_hand': hand.value_counts()})
-ranking['metric_kept_total'] = metric_kept_cls.value_counts()
-ranking['pct_removed'] = (100 * ranking['removed_by_hand']
-                          / ranking['metric_kept_total']).round(1)
-ranking = ranking.sort_values('removed_by_hand', ascending=False)
-ranking""")
-
-# ---- 7. Final clustering on the recomputed scVI ------------------------------
-md("""## 7. Recompute scVI and get the final clustering
+# ---- 5. Final clustering on the recomputed scVI ------------------------------
+md("""## 5. Recompute scVI and get the final clustering
 
 The UMAP you have been looking at so far (`X_umap_prefilter`) was computed on
 **all** nuclei - including the low-quality ones you just removed. Now that you have
@@ -753,11 +697,10 @@ md("""---
 It picks up right where the main section left off - you have clusters and reference
 labels - and walks through:
 
-- **7. Marker genes** - reading out neurotransmitter identity per cluster.
-- **8. Your filtering vs. the reference** - grading your QC against the atlas.
-- **9. Export for cellxgene** - saving a browser-ready object.
-- **10. A glimpse of spatial transcriptomics.**
-- **11. Explore the data interactively** - links to the online atlases.
+- **6. Marker genes** - reading out neurotransmitter identity per cluster.
+- **7. Export for cellxgene** - saving a browser-ready object.
+- **8. A glimpse of spatial transcriptomics.**
+- **9. Explore the data interactively** - links to the online atlases.
 
 Work through it at your own pace after the session.
 
@@ -774,8 +717,8 @@ whole-cell data. We read from the **raw `counts` layer** (the fraction-of-reads
 metric only makes sense on raw UMIs, not the log-normalized `X`).""")
 code("""sc.pl.highest_expr_genes(adata, n_top=20, layer='counts')""")
 
-# ---- 7. Marker genes ----------------------------------------------------------
-md("""## 7. Marker genes
+# ---- 6. Marker genes ----------------------------------------------------------
+md("""## 6. Marker genes
 
 The atlas defines cell types largely by their **neurotransmitter identity**. We use
 transmitter-pathway genes from the manuscript marker figures
@@ -819,7 +762,11 @@ classifier - each gene's coefficient measures how much its expression predicts t
 cell type against all the others) **separately within each species**, then score each
 gene by its **minimum** marker score across species: a gene only wins if it is
 strongly enriched in **human and macaque and mouse**. A species is **skipped** for a
-group when that group has **fewer than 20 cells** there (too few to rank reliably).""")
+group when that group has **fewer than 20 cells** there (too few to rank reliably).
+
+This is a **deliberately simple first pass** - keep an eye on the heatmaps below, and
+you will see it is far from perfect. We turn improving it into a challenge right
+after.""")
 code("""# Conserved markers: rank genes per species with logistic regression, then take
 # the MIN coefficient across species so a gene only wins if it marks the cell type
 # in *every* species.
@@ -878,34 +825,93 @@ for sp in sorted(adata_lab.obs['species'].unique()):
                   cmap='viridis', show_gene_labels=True,
                   figsize=(max(8, 0.45 * len(conserved_genes)), 6))""")
 
-# ---- 8. Your filtering vs. the reference -------------------------------------
-md("""## 8. Your filtering vs. the reference
+md("""### 🧩 Challenge: can you find *better* conserved markers?
 
-Compare **your** QC decisions with **the atlas's** on the same pre-filter UMAP. If
-you tightened or loosened the thresholds in section 3, the left panel will shift
-relative to the right one.""")
-code("""# Build a tiny AnnData holding just the pre-filter UMAP + both QC labels so we
-# can reuse the standard scanpy plotting (the working `adata` is now filtered).
-qc_ad = sc.AnnData(obs=qc_compare[['your_qc', 'atlas_sciduck_qc']].astype('category').copy())
-qc_ad.obsm['X_umap'] = qc_compare[['umap1', 'umap2']].to_numpy(float)
-qc_ad.obs['your_qc']          = qc_ad.obs['your_qc'].cat.set_categories(['keep', 'remove'])
-qc_ad.obs['atlas_sciduck_qc'] = qc_ad.obs['atlas_sciduck_qc'].cat.set_categories(['passed_qc', 'filtered_out'])
-qc_ad.uns['your_qc_colors']          = ['#2c7fb8', '#d95f0e']
-qc_ad.uns['atlas_sciduck_qc_colors'] = ['#2c7fb8', '#d95f0e']
+Look hard at the heatmaps above - the block-diagonal is **messy**. Several columns
+light up in more than one cell type, some cell types share the *same* top gene, and a
+marker that looks great in one species can be washed out in another. The recipe we used
+is crude on purpose, and you can almost certainly beat it. Some of its weaknesses:
 
-with plt.rc_context({'figure.figsize': (6, 6)}):
-    sc.pl.umap(qc_ad, color=['your_qc', 'atlas_sciduck_qc'], size=8, wspace=0.3,
-               title=['your filtering (this notebook)',
-                      'atlas filtering (published thresholds)'])
+- **Only one gene per cell type.** We keep the single top-scoring gene per group; a
+  usable panel usually needs several genes, and the runner-up genes are thrown away.
+- **A big coefficient is not a good marker.** The logistic-regression score rewards
+  discriminative power, but says nothing about whether the gene is *specific* (off in
+  the other cell types) or even *detectable* in most cells of the group.
+- **`min` across species is brittle.** One under-powered species can veto an otherwise
+  excellent marker, and a single hard bottleneck ignores *how* strong the agreement is.
+- **No effect-size or expression-fraction filter,** so lowly-expressed, noisy genes can
+  sneak to the top.
 
-# how often do the two decisions agree?
-agree = ((qc_compare['your_qc'] == 'keep') ==
-         (qc_compare['atlas_sciduck_qc'] == 'passed_qc'))
-print(f'agreement: {agree.mean():.1%} of {len(qc_compare):,} nuclei')
-print(pd.crosstab(qc_compare['your_qc'], qc_compare['atlas_sciduck_qc']))""")
+**Your task: design and implement a better conserved-marker selector.** A few directions
+worth trying:
 
-# ---- 9. Export for cellxgene --------------------------------------------------
-md("""## 9. Export for cellxgene
+1. Score each gene per group with **interpretable, comparable** statistics in *every*
+   species - e.g. **log fold-change**, and the **fraction of cells expressing it
+   in-group vs out-of-group** (a specificity signal) - and require all three species to
+   clear a bar on each.
+2. Aggregate across species with a **rank product / rank-sum** rather than a raw `min`,
+   so no single species dominates but weak agreement is still penalized.
+3. Return a **ranked shortlist (top-k)** per cell type, then keep only genes that are
+   *specific* - high in the target type and low nearly everywhere else.
+4. **Validate by transfer:** hold out one species, pick markers from the other two, and
+   check they still separate the cell type in the held-out species. Good conserved
+   markers should generalize to a species they were not chosen on.
+
+The starter below re-ranks genes per species with **Wilcoxon** and `pts=True`, which
+gives you `logfoldchanges`, `pct_nz_group`, and `pct_nz_reference` alongside the score -
+the raw material for a smarter selector. Take it from there.""")
+code("""# Starter kit: richer per-species statistics for you to build a better selector on.
+# Wilcoxon with pts=True adds logfoldchanges + the fraction of cells expressing each
+# gene inside the group (pct_nz_group) vs outside it (pct_nz_reference).
+species_stats = {}
+for sp in sorted(adata_lab.obs['species'].unique()):
+    a_sp = adata_lab[adata_lab.obs['species'] == sp].copy()
+    a_sp.obs[GROUPBY] = a_sp.obs[GROUPBY].cat.remove_unused_categories()
+    counts = a_sp.obs[GROUPBY].value_counts()
+    valid = counts.index[counts >= MIN_CELLS_PER_SPECIES].tolist()
+    if len(valid) < 2:
+        continue
+    sc.tl.rank_genes_groups(a_sp, GROUPBY, groups=valid, method='wilcoxon', pts=True)
+    species_stats[sp] = sc.get.rank_genes_groups_df(a_sp, group=None)
+
+# Peek at what you now have to work with (score + effect size + specificity):
+example_sp = next(iter(species_stats))
+print(f'per-species stats available for: {list(species_stats)}')
+print(f'columns: {species_stats[example_sp].columns.tolist()}')
+species_stats[example_sp].head()
+
+# TODO (your turn): combine logfoldchanges + (pct_nz_group - pct_nz_reference) across
+# ALL species into a single conserved-specificity score, return the top-k genes per
+# cell type, and re-draw the heatmaps. Does the block-diagonal get cleaner? Then try
+# the hold-one-species-out transfer test.""")
+
+md("""### 🧩 Challenge: which cell types are the most *divergent* across species?
+
+The markers above ask which genes are **conserved**. Flip the question: **which cell
+types differ the most between human, macaque and mouse?** Some lineages (e.g. many
+non-neurons) are nearly identical across species, while others may have drifted. Design
+a way to rank the `Supergroup_V2` (or `Subclass_V2`) cell types from most-conserved to
+most-divergent. Two complementary approaches:
+
+- **Cross-species expression correlation.** For each cell type, compute a
+  **pseudobulk** profile (mean log-normalized expression across its cells) *separately
+  per species*, then correlate the profiles between species pairs (Pearson or Spearman
+  over shared genes - restrict to HVGs to cut noise). A **low** average
+  between-species correlation means that cell type is divergent. Rank the cell types by
+  this score and plot it.
+- **Differential expression between species, within a cell type.** Subset to one cell
+  type, set `groupby='species'`, and run `sc.tl.rank_genes_groups` to count how many
+  genes are significantly different between species (e.g. `pvals_adj < 0.05` and
+  `|logfoldchanges| > 1`). More species-DE genes ⇒ more divergent. Which cell types top
+  the list, and do they agree with the correlation ranking?
+
+**Watch for confounds:** a cell type with very few cells in one species, or uneven
+sequencing depth between species, can masquerade as "divergent." Guard against it by
+requiring a minimum cell count per species and by working on the log-normalized (not
+raw) values.""")
+
+# ---- 7. Export for cellxgene --------------------------------------------------
+md("""## 7. Export for cellxgene
 
 Write the processed object to `/results/` so it can be opened in **cellxgene** for
 interactive exploration. (Your instructor will provide the cellxgene capsule link.)""")
@@ -934,8 +940,8 @@ subprocess.run([sys.executable, script, tmp, safe], check=True)
 os.remove(tmp)
 print('Saved', safe)""")
 
-# ---- 10. Spatial teaser -------------------------------------------------------
-md("""## 10. A glimpse of spatial transcriptomics
+# ---- 8. Spatial teaser -------------------------------------------------------
+md("""## 8. A glimpse of spatial transcriptomics
 
 snRNA-seq tells us **what** cell types exist, but not **where** they sit. Spatial
 methods profile transcripts while preserving tissue coordinates. The workshop ships
@@ -1058,8 +1064,8 @@ fig.suptitle('All Cell-Type Groups - Representative Cross-Species Sections',
              fontsize=13)
 plt.show()""")
 
-# ---- 11. Interactive atlases --------------------------------------------------
-md("""## 11. Explore the data interactively
+# ---- 9. Interactive atlases --------------------------------------------------
+md("""## 9. Explore the data interactively
 
 **cellxgene** - the cellxgene-safe object you just saved
 (`SpC_workshop_snRNA_session1_cellxgene.h5ad`) and the spatial example
