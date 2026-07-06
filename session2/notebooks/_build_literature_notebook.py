@@ -35,12 +35,7 @@ md("""# Session 2 - Find the textbook cell types in the atlas
 
 **Lipari Genomics Workshop 2026 - Interactive Part 2A (before the whole-brain mapping)**
 
-In Session 1 you built a spinal-cord (SpC) taxonomy of cell types. Each one has a
-descriptive `Group_V2` name (like `aMN NEFH Chol`) - but those names basically
-*spell out the answer*, so for this exercise **we hide them**. Instead every group
-appears as an anonymous **`Group` ID**: its subclass plus a number, e.g. `Glut-D 7`,
-`GABA-V 3`. Your job is to work out which anonymous group is which **famous
-spinal-cord cell type from the literature** - and only then uncover its real name.
+> **Note:** cell-type names are hidden — each group is shown as an anonymous `Group` ID (subclass + number, e.g. `Glut-D 7`). You'll uncover the real name after identifying each type.
 
 For four classic cell types we give you:
 

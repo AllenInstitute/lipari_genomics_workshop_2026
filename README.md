@@ -26,7 +26,7 @@ each session README.
 ## The two sessions
 
 ### 🧬 Session 1 — Single-cell analysis & visualization *(Monday)*
-> `session1/notebooks/session1_qc_clustering_visualization.ipynb`
+> [`session1/notebooks/session1_qc_clustering_visualization.ipynb`](session1/notebooks/session1_qc_clustering_visualization.ipynb)
 
 "You just got your data back." Walk a spinal-cord snRNA-seq subsample through a
 real QC → clustering → visualization pipeline in **scanpy**: explore quality
@@ -38,19 +38,17 @@ See [`session1/README.md`](session1/README.md).
 ### 🗺️ Session 2 — Spinal-cord annotation & whole-brain mapping *(Tuesday)*
 Run the two student notebooks in order:
 1. **Part 2A — find the textbook cell types**
-   `session2/notebooks/session2_literature_cell_types.ipynb`
+   [`session2/notebooks/session2_literature_cell_types.ipynb`](session2/notebooks/session2_literature_cell_types.ipynb)
    The descriptive cell-type names are hidden; use marker genes, the snRNA UMAP,
    and example spatial sections to identify classic spinal-cord neurons (itch,
    nociceptive-projection, Renshaw) behind anonymous IDs.
 2. **Part 2B — map to the mouse whole brain**
-   `session2/notebooks/session2_webportal_mapping_spatial.ipynb`
+   [`session2/notebooks/session2_webportal_mapping_spatial.ipynb`](session2/notebooks/session2_webportal_mapping_spatial.ipynb)
    Map your Session-1 taxonomy to the Allen whole-mouse-brain atlas with the
    **MapMyCells** web portal, then visualize the results on the mouse-brain
    MERFISH spatial atlas.
 
-See [`session2/README.md`](session2/README.md). An advanced, fully-local
-"reciprocal mapping" variant (no web portal) is kept under
-`session2/notebooks/old/` for the Python-comfortable.
+See [`session2/README.md`](session2/README.md).
 
 ## Tools you'll touch
 | Tool | What it's for | Link |
